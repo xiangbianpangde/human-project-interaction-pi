@@ -42,8 +42,11 @@ describe("session-only candidate outbox", () => {
   it("persists a receipt and candidate but never HPS or canonical state", () => {
     const candidate = candidateResult();
     const data = createOutboxEntry(candidate);
+    assert.equal(data.schema, "hpi/session-outbox/v2");
+    assert.equal(data.adapterVersion, "hpi-session/0.2.0");
     assert.equal(data.authority, "SESSION_ONLY_NOT_PROJECT_CANONICAL");
     assert.equal(data.transportStatus, "PENDING_CANONICAL_WRITER");
+    assert.match(data.candidateDigest, /^[a-f0-9]{64}$/u);
     assert.equal(data.candidate.status, "CANDIDATE");
     assert.equal("hps" in data, false);
     assert.equal("humanResult" in data, false);
@@ -94,6 +97,36 @@ describe("session-only candidate outbox", () => {
     assert.equal(restored.items.length, 1);
     assert.equal(restored.errors.length, 1);
     assert.match(restored.errors[0].error, /authority boundary is invalid/);
+  });
+
+  it("quarantines malformed receipt envelopes without breaking valid recovery", () => {
+    const good = createOutboxEntry(candidateResult());
+    const corruptions = [
+      ["missing recordedAt", (data) => delete data.receipt.recordedAt, /recordedAt is required/],
+      ["null recordedAt", (data) => { data.receipt.recordedAt = null; }, /non-empty string/],
+      ["number recordedAt", (data) => { data.receipt.recordedAt = 123; }, /non-empty string/],
+      ["non-canonical recordedAt", (data) => { data.receipt.recordedAt = "2026-08-30"; }, /canonical UTC ISO/],
+      ["forged receipt id", (data) => { data.receiptId = "RECEIPT-FORGED"; }, /does not match receipt and candidate digest/],
+      ["missing candidate digest", (data) => { delete data.candidateDigest; }, /candidateDigest is required/],
+      ["forged candidate digest", (data) => { data.candidateDigest = "0".repeat(64); }, /does not match candidate content/],
+      ["tampered candidate", (data) => { data.candidate.payload.action = "tampered"; }, /does not match candidate content/],
+      ["wrong adapter", (data) => { data.adapterVersion = "hpi-session/other"; }, /adapterVersion is invalid/],
+      ["extra envelope key", (data) => { data.accepted = true; }, /accepted is not allowed/],
+    ];
+    const entries = corruptions.map(([name, mutate], index) => {
+      const data = structuredClone(good);
+      mutate(data);
+      return customEntry(`bad-${index}-${name}`, data);
+    });
+    entries.push(customEntry("good-entry", good));
+
+    const restored = restoreOutbox(entries, projection.sourceDigest);
+    assert.equal(restored.items.length, 1);
+    assert.equal(restored.current.length, 1);
+    assert.equal(restored.errors.length, corruptions.length);
+    corruptions.forEach(([, , expected], index) => {
+      assert.match(restored.errors[index].error, expected);
+    });
   });
 
   it("ignores unrelated custom entries", () => {

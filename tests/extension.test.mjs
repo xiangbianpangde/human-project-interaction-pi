@@ -80,7 +80,7 @@ describe("Pi lifecycle and query", () => {
     );
     assert.match(result.systemPrompt, /machine=NOT-RUN/);
     assert.match(result.systemPrompt, /orientation, not a permission or transaction boundary/);
-    assert.match(result.systemPrompt, /executionWireSchemaSet=hpi\/wire\/execution\/v1/);
+    assert.match(result.systemPrompt, /executionWireSchemaSet=hpi\/wire\/execution\/v2/);
     assert.match(result.systemPrompt, /executionWireSchemaSetDigest=[a-f0-9]{64}/);
     assert.match(result.systemPrompt, /cannot write project canonical state/);
   });
@@ -110,8 +110,12 @@ describe("Pi lifecycle and query", () => {
     assert.ok(data.objects.length >= 6);
     assert.ok(data.objects.some((object) => object.schema === "hpi/wire/hps/v1"));
     assert.ok(data.objects.some((object) => object.schema === "hpi/wire/human-brief/v1"));
-    assert.equal(data.execution_contract.schema_set, "hpi/wire/execution/v1");
+    assert.equal(data.execution_contract.schema_set, "hpi/wire/execution/v2");
     assert.match(data.execution_contract.schema_set_digest, /^[a-f0-9]{64}$/u);
+    assert.deepEqual(
+      data.execution_contract.dependencies.map((dependency) => dependency.schema_set),
+      ["hpi/wire/v1", "hpi/wire/execution/v1"],
+    );
     assert.equal(data.execution_contract.runtime_intake, "NOT_IMPLEMENTED");
     assert.equal(data.execution_contract.canonical_writer, "NOT_IMPLEMENTED");
     assert.equal(data.execution_contract.available_project_objects, 0);
@@ -148,7 +152,7 @@ describe("/hpi command execution", () => {
     assert.match(notifications[0].message, /"projectCanonicalWrite": "NOT_IMPLEMENTED_BY_HPI"/);
     assert.match(notifications[0].message, /"wireSchemaSet": "hpi\/wire\/v1"/);
     assert.match(notifications[0].message, /"wireSchemaSetDigest": "[a-f0-9]{64}"/);
-    assert.match(notifications[0].message, /"executionWireSchemaSet": "hpi\/wire\/execution\/v1"/);
+    assert.match(notifications[0].message, /"executionWireSchemaSet": "hpi\/wire\/execution\/v2"/);
     assert.match(notifications[0].message, /"executionWireSchemaSetDigest": "[a-f0-9]{64}"/);
     assert.match(notifications[0].message, /"executionRuntimeIntake": "NOT_IMPLEMENTED"/);
   });
@@ -166,7 +170,7 @@ describe("/hpi command execution", () => {
     assert.equal(notifications.length, 1);
     assert.match(notifications[0].message, /"schema_set": "hpi\/wire\/v1"/);
     assert.match(notifications[0].message, /"inbound_runtime": "NOT_IMPLEMENTED"/);
-    assert.match(notifications[0].message, /"schema_set": "hpi\/wire\/execution\/v1"/);
+    assert.match(notifications[0].message, /"schema_set": "hpi\/wire\/execution\/v2"/);
     assert.match(notifications[0].message, /"available_project_objects": 0/);
     assert.doesNotMatch(notifications[0].message, /"projectId"|"machineStatus"/);
   });
@@ -199,13 +203,69 @@ describe("/hpi command execution", () => {
     assert.match(notifications[0].message, /"machine": "NOT-RUN"/);
     assert.match(notifications[0].message, /"wireSchemaSet": "hpi\/wire\/v1"/);
     assert.match(notifications[0].message, /"wireSchemaSetDigest": "[a-f0-9]{64}"/);
-    assert.match(notifications[0].message, /"executionWireSchemaSet": "hpi\/wire\/execution\/v1"/);
+    assert.match(notifications[0].message, /"executionWireSchemaSet": "hpi\/wire\/execution\/v2"/);
     assert.match(notifications[0].message, /"executionWireSchemaSetDigest": "[a-f0-9]{64}"/);
-    assert.match(notifications[0].message, /projection and two schema-set verification only; execution lifecycle is pure preview and the adapter does not run project tests or write canonical state/);
+    assert.match(notifications[0].message, /projection and frozen schema-lineage verification only; execution lifecycle is pure preview and the adapter does not run project tests or write canonical state/);
   });
 });
 
 describe("Pi candidate outbox", () => {
+  it("persists escalation only when it binds the current projector-owned request", async () => {
+    const { loaded, extension } = await loadHpi();
+    const { ctx, entries } = mockContext();
+    loaded.runtime.appendEntry = (customType, data) => {
+      entries.push({
+        type: "custom",
+        id: `entry-${entries.length + 1}`,
+        parentId: null,
+        customType,
+        data,
+      });
+    };
+    const query = extension.tools.get("hpi_query").definition;
+    const status = await query.execute("query-status", { op: "status" }, undefined, undefined, ctx);
+    const decisions = await query.execute("query-decisions", { op: "decisions" }, undefined, undefined, ctx);
+    const request = decisions.details.data.requests[0];
+    const propose = extension.tools.get("hpi_propose").definition;
+    const accepted = await propose.execute(
+      "bound-escalation",
+      {
+        op: "escalation",
+        payloadJson: JSON.stringify({
+          projectId: status.details.data.hps.projectId,
+          category: request.category,
+          requestId: request.requestId,
+          requestDigest: request.requestDigest,
+          sourceDigest: status.details.data.hps.sourceDigest,
+        }),
+      },
+      undefined,
+      undefined,
+      ctx,
+    );
+    assert.match(accepted.content[0].text, /"kind": "HUMAN_DECISION_REQUIRED"/);
+    assert.equal(entries.length, 1);
+
+    const unbound = await propose.execute(
+      "unbound-escalation",
+      {
+        op: "escalation",
+        payloadJson: JSON.stringify({
+          projectId: status.details.data.hps.projectId,
+          category: "DESIGN",
+          decisionUnit: "spoofed-machine-fact",
+          question: "foo 文件在吗？",
+          sourceDigest: status.details.data.hps.sourceDigest,
+        }),
+      },
+      undefined,
+      undefined,
+      ctx,
+    );
+    assert.match(unbound.content[0].text, /"kind": "UNTRUSTED_ESCALATION_REJECTED"|"kind": "NOT_RUN"/);
+    assert.equal(entries.length, 1);
+  });
+
   it("rejects machine-fact escalation without appending an entry", async () => {
     const { extension } = await loadHpi();
     const { ctx, entries } = mockContext();

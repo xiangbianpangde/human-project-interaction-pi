@@ -62,6 +62,62 @@ describe("semantic trace and orphan protection", () => {
     source.activeWork[0] = { ...source.activeWork[0], painRefs: [], designRefs: [] };
     assert.throws(() => projectSource(source), ProjectionError);
   });
+
+  it("rejects duplicate logical ids before Brief and Trace can diverge", () => {
+    const cases = [
+      {
+        name: "Pain",
+        mutate(source) {
+          source.pains.push(structuredClone(source.pains[0]));
+        },
+        expected: /duplicate id/,
+      },
+      {
+        name: "Design",
+        mutate(source) {
+          source.designPoints.push(structuredClone(source.designPoints[0]));
+        },
+        expected: /duplicate id/,
+      },
+      {
+        name: "TaskSlice",
+        mutate(source) {
+          source.activeWork.push(structuredClone(source.activeWork[0]));
+        },
+        expected: /duplicate taskId/,
+      },
+      {
+        name: "MachineResult id",
+        mutate(source) {
+          const duplicate = structuredClone(source.machineResults[0]);
+          duplicate.taskId = "TS-OTHER";
+          source.machineResults.push(duplicate);
+        },
+        expected: /duplicate resultId/,
+      },
+      {
+        name: "MachineResult task",
+        mutate(source) {
+          const duplicate = structuredClone(source.machineResults[0]);
+          duplicate.resultId = "MR-OTHER";
+          source.machineResults.push(duplicate);
+        },
+        expected: /duplicate taskId/,
+      },
+      {
+        name: "EscalationRequest",
+        mutate(source) {
+          source.escalationRequests.push(structuredClone(source.escalationRequests[0]));
+        },
+        expected: /duplicate requestId/,
+      },
+    ];
+    for (const testCase of cases) {
+      const source = loadTs001Pilot(rootPath);
+      testCase.mutate(source);
+      assert.throws(() => projectSource(source), testCase.expected, testCase.name);
+    }
+  });
 });
 
 describe("deterministic Human Brief", () => {

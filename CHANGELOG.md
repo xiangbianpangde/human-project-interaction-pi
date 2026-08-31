@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.0 - 2026-08-31
+
+- Preserve every `hpi/wire/execution/v1` byte and publish `hpi/wire/execution/v2` after an independent review blocked the 0.4 baseline; pin both interaction v1 and execution v1 digests in the v2 manifest.
+- Close erroneous PASS paths by matching Task/Evidence frozen identities as `id + revision + sha256`, rejecting duplicate Evidence logical ids, and requiring high-trust Evidence to be directly referenced by each VERIFIED PASS fact.
+- Make Result replay classification ledger-wide and order-independent; pre-existing same-key or same-ID divergent revisions fail closed before candidate classification.
+- Require projector-owned `requestId + requestDigest + sourceDigest` binding before any human escalation; regex inspection remains defence-in-depth only.
+- Publish session outbox v2, bind each full candidate digest into its receipt, validate exact envelopes, and quarantine malformed timestamps, receipts, adapter versions, ids, or extra fields without breaking valid recovery.
+- Reject duplicate normalized Pain/Design/Task/Result/Request ids before Brief and Trace construction.
+- Use strict RFC3339 execution timestamps and host-independent POSIX scoped paths; add Windows contract cases.
+- Bound Adapter authority reads to in-root regular non-symlink files of at most 2 MiB.
+- Add pinned-action GitHub CI for Linux Node 20/22 and Windows execution-contract tests; pin Pi 0.84.2 as an exact development dependency.
+- Keep TS-001 `NOT-RUN`, runtime intake, Result commit, full Reconciler, HumanResult intake, and canonical writing unchanged and unimplemented.
+
 ## 0.4.0 - 2026-08-30
 
 - Freeze independent `hpi/wire/execution/v1` schemas for TaskSlice, HandoffBundle, Attempt, Evidence, ResultBundle, and StaleReport without changing `hpi/wire/v1` bytes or digest.

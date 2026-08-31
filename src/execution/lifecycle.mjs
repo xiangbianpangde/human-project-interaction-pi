@@ -19,7 +19,7 @@ import { toWireAttempt } from "./codecs.mjs";
 
 export function createRetryAttempt(previousAttempt, value) {
   assertWireRecordRevision(previousAttempt, "attempt_revision", "previousAttempt");
-  if (previousAttempt.schema !== "hpi/wire/attempt/v1") fail("previousAttempt.schema", "must be an Attempt v1 record");
+  if (previousAttempt.schema !== "hpi/wire/attempt/v2") fail("previousAttempt.schema", "must be an Attempt v2 record");
   if (!RETRYABLE_ATTEMPT_STATUSES.includes(previousAttempt.status)) {
     fail("previousAttempt.status", "retry requires FAILED, BLOCKED, INTERRUPTED, or CANCELLED");
   }
@@ -66,21 +66,68 @@ function assertResultIdempotency(bundle, path) {
   }
 }
 
+function groupDistinctRevisions(bundles, keyOf) {
+  const groups = new Map();
+  for (const bundle of bundles) {
+    const key = keyOf(bundle);
+    const revisions = groups.get(key) ?? new Map();
+    revisions.set(bundle.bundle_revision, bundle);
+    groups.set(key, revisions);
+  }
+  return groups;
+}
+
+function firstLedgerConflict(existing) {
+  const checks = [
+    {
+      kind: "LEDGER_IDEMPOTENCY_CONFLICT",
+      groups: groupDistinctRevisions(existing, (bundle) => bundle.idempotency_key),
+    },
+    {
+      kind: "LEDGER_IDENTITY_CONFLICT",
+      groups: groupDistinctRevisions(existing, (bundle) => bundle.result_bundle_id),
+    },
+  ];
+  for (const check of checks) {
+    const conflictKeys = [...check.groups.entries()]
+      .filter(([, revisions]) => revisions.size > 1)
+      .map(([key]) => key)
+      .sort();
+    if (conflictKeys.length === 0) continue;
+    const key = conflictKeys[0];
+    return {
+      kind: check.kind,
+      conflict_key: key,
+      existing: [...check.groups.get(key).values()].toSorted((left, right) =>
+        left.bundle_revision.localeCompare(right.bundle_revision),
+      ),
+      second_commit_created: false,
+      project_canonical_changed: false,
+    };
+  }
+  return null;
+}
+
 export function classifyResultSubmission(existingBundles, candidate) {
   const existing = arrayAt(existingBundles, "existingBundles");
-  if (candidate?.schema !== "hpi/wire/result-bundle/v1") {
-    fail("candidate.schema", "must be a ResultBundle v1 record");
+  if (candidate?.schema !== "hpi/wire/result-bundle/v2") {
+    fail("candidate.schema", "must be a ResultBundle v2 record");
   }
   assertWireRecordRevision(candidate, "bundle_revision", "candidate");
   assertResultIdempotency(candidate, "candidate");
   for (const [index, bundle] of existing.entries()) {
-    if (bundle?.schema !== "hpi/wire/result-bundle/v1") {
-      fail(`existingBundles[${index}].schema`, "must be a ResultBundle v1 record");
+    if (bundle?.schema !== "hpi/wire/result-bundle/v2") {
+      fail(`existingBundles[${index}].schema`, "must be a ResultBundle v2 record");
     }
     assertWireRecordRevision(bundle, "bundle_revision", `existingBundles[${index}]`);
     assertResultIdempotency(bundle, `existingBundles[${index}]`);
   }
-  const byKey = existing.find((bundle) => bundle.idempotency_key === candidate.idempotency_key);
+  const ledgerConflict = firstLedgerConflict(existing);
+  if (ledgerConflict) return ledgerConflict;
+
+  const byKey = existing
+    .filter((bundle) => bundle.idempotency_key === candidate.idempotency_key)
+    .toSorted((left, right) => left.bundle_revision.localeCompare(right.bundle_revision))[0];
   if (byKey) {
     if (byKey.bundle_revision === candidate.bundle_revision) {
       return {
@@ -98,7 +145,9 @@ export function classifyResultSubmission(existingBundles, candidate) {
       project_canonical_changed: false,
     };
   }
-  const byId = existing.find((bundle) => bundle.result_bundle_id === candidate.result_bundle_id);
+  const byId = existing
+    .filter((bundle) => bundle.result_bundle_id === candidate.result_bundle_id)
+    .toSorted((left, right) => left.bundle_revision.localeCompare(right.bundle_revision))[0];
   if (byId) {
     return {
       kind: "IDENTITY_CONFLICT",
@@ -164,7 +213,7 @@ export function computeStaleReport(value) {
   const reportIdentity = { upstream_before: before, upstream_after: after, effects };
   const report = sealRecord(
     {
-      schema: "hpi/wire/stale-report/v1",
+      schema: "hpi/wire/stale-report/v2",
       stale_report_id: `STALE-${sha256(reportIdentity)}`,
       ...reportIdentity,
       detected_at: timestamp(object.detectedAt, "staleReport.detectedAt"),

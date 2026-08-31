@@ -3,7 +3,7 @@ name: human-project-interaction
 description: Re-enters supported multi-agent or long-running projects through Human Project State and Human Brief, separates machine evidence from human intent/design/risk decisions, and renders the hpi-project /talk view. Use inside a detected HPI project adapter (currently TS-001 pilot or R-ICL v4) when the user asks 项目现在到哪了、为什么做、解决了哪个痛点、还剩什么、需要我决定什么, resumes after another agent/session, receives a trust request about tests/hash/schema/evidence, or raises a new pain. On unsupported roots report adapter unavailable once and stop; do not guess by scanning the repository. Do not use for routine single-file coding, ordinary code review, or running machine tests themselves.
 compatibility: Pi coding agent with hpi_query, hpi_propose, and /talk tools
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
   status: "active"
   layer: "task"
   priority: "45"
@@ -43,9 +43,9 @@ HPI is a deterministic interaction adapter, not Harness Core.
 - None of them can write project canonical state or convert a candidate into HumanResult.
 - A prompt instruction is never a filesystem, permission, transaction, or identity boundary.
 - Supported adapters are currently `ts001-pilot/0.1.0` and `ricl-v4-readonly/0.1.0`; neither grants write authority.
-- External interoperability uses immutable `hpi/wire/v1` and dependent `hpi/wire/execution/v1` JSON Schema sets with snake_case-only keys; camelCase remains internal.
+- External interoperability uses immutable interaction v1, preserved execution v1, and current `hpi/wire/execution/v2` with snake_case-only keys; camelCase remains internal.
 - Execution codecs/lifecycle helpers can only validate or return candidate/preview data; they cannot dispatch Agents, accept Bundles, commit Results, invalidate canonical state, or create HumanResult.
-- If the adapter, either wire-schema set/dependency, source revision, evidence, or canonical writer is unavailable or drifted, fail closed and say so; never scan drafts/raw trees to invent a replacement truth source.
+- If the adapter, any wire-schema lineage member/dependency, source revision, evidence, or canonical writer is unavailable or drifted, fail closed and say so; never scan drafts/raw trees to invent a replacement truth source.
 
 ## Workflow
 
@@ -53,7 +53,7 @@ HPI is a deterministic interaction adapter, not Harness Core.
 
 1. Call `hpi_query` with `op: "status"`.
 2. If the tool reports no supported Adapter, state that once and stop; do not render a fabricated Brief.
-3. Require `wireSchemaSet: hpi/wire/v1`, `executionWireSchemaSet: hpi/wire/execution/v1`, and both verified digests; missing schema/dependency integrity is a machine failure, not a human question.
+3. Require `wireSchemaSet: hpi/wire/v1`, current `executionWireSchemaSet: hpi/wire/execution/v2`, and its dependency on preserved execution v1; missing schema/dependency integrity is a machine failure, not a human question.
 4. Read the two axes independently: `machineStatus` and `humanStatus`.
 5. State the detected Adapter, phase, current intent, unresolved items, and authority boundary.
 6. Never infer acceptance from chat summaries, “可以”, Agent self-report, source prose containing PASS, or task completion text.
@@ -79,7 +79,7 @@ Machine facts include test counts, PASS claims, hash/SHA, schema validity, file 
 - Do not ask “你是否相信/接受/确认”.
 - Query `evidence` when needed.
 - If evidence is absent or the authority says NOT-RUN/RUNNING/INCOMPLETE, preserve that authority state; individual evidence cannot promote it to PASS.
-- If an Agent supplied an escalation candidate, pass it to `hpi_propose` with `op: "escalation"`; follow the deterministic Gate result.
+- An Agent cannot mint a new human question from prose. For `hpi_propose(op="escalation")`, pass only a binding to the projector-owned current request: `projectId`, `category`, `requestId`, `requestDigest`, and `sourceDigest`; optional echoed question/unit must match exactly.
 - A Gate result with `humanEscalation: null` ends the human question. Report the missing machine evidence or current machine status instead.
 
 ### 4. Ask one real human decision
@@ -137,7 +137,7 @@ Before calling an HPI interaction complete, verify:
 - Machine and Human status are both visible and neither overwrote the other.
 - NOT-RUN or INCOMPLETE, remaining, and risks remain visible in L0/L1.
 - A machine-fact trust request produced no human escalation.
-- Both frozen wire-schema sets loaded with pinned digests and the execution dependency matched `hpi/wire/v1`; mixed snake_case/camelCase input was not accepted.
+- The interaction v1 + preserved execution v1 + current execution v2 lineage loaded with pinned digests; mixed snake_case/camelCase input was not accepted.
 - Any execution Result/retry/stale output was labeled candidate/preview only and did not claim dispatch, commit, automatic invalidation, or canonical mutation.
 - The rendered style is `hpi-project` and visual verification has no console/page errors.
 - A decision click became at most a CandidateEvent.
@@ -145,4 +145,4 @@ Before calling an HPI interaction complete, verify:
 
 ## Completion
 
-Report the detected Adapter, both wire-schema set/digests, current projection id, source digest, machine/human axes, any session candidate id, and explicit non-implemented boundaries. Never describe this interaction surface as the full multi-Agent runtime; never convert TS-001 NOT-RUN or R-ICL source prose into PASS-ENGINEERING.
+Report the detected Adapter, current interaction/execution set digests and execution lineage, projection id, source digest, machine/human axes, any session candidate id, and explicit non-implemented boundaries. Never describe this interaction surface as the full multi-Agent runtime; never convert TS-001 NOT-RUN or R-ICL source prose into PASS-ENGINEERING.

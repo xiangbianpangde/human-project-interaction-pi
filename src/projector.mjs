@@ -4,6 +4,7 @@ import {
   SCHEMAS,
   contentId,
   sha256,
+  validateEscalationRequest,
   validateHps,
   validateHumanBrief,
   validateMachineResult,
@@ -34,6 +35,16 @@ function requireString(value, name) {
     throw new ProjectionError(`${name} must be a non-empty string`);
   }
   return value;
+}
+
+function uniqueStringField(values, field, path) {
+  const seen = new Set();
+  for (const [index, value] of values.entries()) {
+    const id = requireString(value?.[field], `${path}[${index}].${field}`);
+    if (seen.has(id)) throw new ProjectionError(`${path} contains duplicate ${field} ${id}`);
+    seen.add(id);
+  }
+  return seen;
 }
 
 function logicalRef(id, revision, value, pointer) {
@@ -83,16 +94,25 @@ function validateNormalizedSource(source) {
   requireString(source.intent?.statement, "source.intent.statement");
 
   const pains = requireArray(source.pains, "source.pains");
-  const painIds = new Set(pains.map((pain) => pain.id));
+  const painIds = uniqueStringField(pains, "id", "source.pains");
   const designs = requireArray(source.designPoints, "source.designPoints");
-  const designIds = new Set(designs.map((design) => design.id));
-  requireArray(source.machineResults, "source.machineResults").forEach((result, index) =>
+  const designIds = uniqueStringField(designs, "id", "source.designPoints");
+  const machineResults = requireArray(source.machineResults, "source.machineResults");
+  machineResults.forEach((result, index) =>
     validateMachineResult(result, `source.machineResults[${index}]`),
   );
+  uniqueStringField(machineResults, "resultId", "source.machineResults");
+  const resultTaskIds = uniqueStringField(machineResults, "taskId", "source.machineResults");
+  const escalationRequests = requireArray(source.escalationRequests, "source.escalationRequests");
+  escalationRequests.forEach((request, index) =>
+    validateEscalationRequest(request, `source.escalationRequests[${index}]`),
+  );
+  uniqueStringField(escalationRequests, "requestId", "source.escalationRequests");
 
-  requireArray(source.activeWork, "source.activeWork").forEach((work, index) => {
+  const activeWork = requireArray(source.activeWork, "source.activeWork");
+  const activeTaskIds = uniqueStringField(activeWork, "taskId", "source.activeWork");
+  activeWork.forEach((work, index) => {
     const path = `source.activeWork[${index}]`;
-    requireString(work.taskId, `${path}.taskId`);
     const workPainRefs = requireArray(work.painRefs, `${path}.painRefs`);
     const workDesignRefs = requireArray(work.designRefs, `${path}.designRefs`);
     if (workPainRefs.length === 0 && workDesignRefs.length === 0) {
@@ -104,7 +124,15 @@ function validateNormalizedSource(source) {
     for (const id of workDesignRefs) {
       if (!designIds.has(id)) throw new ProjectionError(`${path}.designRefs contains unknown id ${id}`);
     }
+    if (!resultTaskIds.has(work.taskId)) {
+      throw new ProjectionError(`${path} has no current MachineResult`);
+    }
   });
+  for (const taskId of resultTaskIds) {
+    if (!activeTaskIds.has(taskId)) {
+      throw new ProjectionError(`source.machineResults contains a result for unknown active task ${taskId}`);
+    }
+  }
   return source;
 }
 

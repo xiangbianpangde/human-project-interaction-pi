@@ -7,10 +7,14 @@ import { sha256 } from "./contracts.mjs";
 export const WIRE_SCHEMA_SET = "hpi/wire/v1";
 export const WIRE_NAMING = "snake_case";
 export const WIRE_SCHEMA_SET_DIGEST = "1d08d1acdda0cf05b29aae46949c900e49349eb21225d75698c6a44c34264725";
-export const EXECUTION_WIRE_SCHEMA_SET = "hpi/wire/execution/v1";
-export const EXECUTION_WIRE_SCHEMA_SET_DIGEST = "450698c6e3218b3419f081dc47576f94edaea36ee0da6a97b35c80ef6d9e88d1";
+export const EXECUTION_WIRE_SCHEMA_SET_V1 = "hpi/wire/execution/v1";
+export const EXECUTION_WIRE_SCHEMA_SET_DIGEST_V1 = "450698c6e3218b3419f081dc47576f94edaea36ee0da6a97b35c80ef6d9e88d1";
+export const EXECUTION_WIRE_SCHEMA_SET = "hpi/wire/execution/v2";
+export const EXECUTION_WIRE_SCHEMA_SET_DIGEST = "1f9a2e495029baf1aec4e28c5cd6a0843ece88d586e4ae8330b3adfba70d73a2";
 
-const MANIFEST_NAME = "manifest.v1.json";
+const INTERACTION_MANIFEST_NAME = "manifest.v1.json";
+const EXECUTION_V1_MANIFEST_NAME = "manifest.v1.json";
+const EXECUTION_MANIFEST_NAME = "manifest.v2.json";
 const DRAFT = "https://json-schema.org/draft/2020-12/schema";
 
 export class WireSchemaError extends Error {
@@ -55,8 +59,12 @@ function defaultSchemaRoot() {
   return fileURLToPath(new URL("../schemas/", import.meta.url));
 }
 
-function defaultExecutionSchemaRoot() {
+function defaultExecutionV1SchemaRoot() {
   return fileURLToPath(new URL("../schemas/execution-v1/", import.meta.url));
+}
+
+function defaultExecutionSchemaRoot() {
+  return fileURLToPath(new URL("../schemas/execution-v2/", import.meta.url));
 }
 
 function validateDependencies(value, expected) {
@@ -86,9 +94,15 @@ function validateDependencies(value, expected) {
   return dependencies;
 }
 
-function loadSchemaSet({ root, expectedSchemaSet, expectedDigest, expectedDependencies = [] }) {
+function loadSchemaSet({
+  root,
+  manifestName,
+  expectedSchemaSet,
+  expectedDigest,
+  expectedDependencies = [],
+}) {
   const rootPath = realpathSync(resolve(root));
-  const manifestPath = join(rootPath, MANIFEST_NAME);
+  const manifestPath = join(rootPath, manifestName);
   let manifest;
   try {
     manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -208,21 +222,47 @@ function loadSchemaSet({ root, expectedSchemaSet, expectedDigest, expectedDepend
 export function loadWireSchemaSet({ root = defaultSchemaRoot() } = {}) {
   return loadSchemaSet({
     root,
+    manifestName: INTERACTION_MANIFEST_NAME,
     expectedSchemaSet: WIRE_SCHEMA_SET,
     expectedDigest: WIRE_SCHEMA_SET_DIGEST,
   });
 }
 
-export function loadExecutionWireSchemaSet({ root = defaultExecutionSchemaRoot() } = {}) {
+export function loadExecutionWireSchemaSetV1({ root = defaultExecutionV1SchemaRoot() } = {}) {
   const interaction = loadWireSchemaSet();
   return loadSchemaSet({
     root,
+    manifestName: EXECUTION_V1_MANIFEST_NAME,
+    expectedSchemaSet: EXECUTION_WIRE_SCHEMA_SET_V1,
+    expectedDigest: EXECUTION_WIRE_SCHEMA_SET_DIGEST_V1,
+    expectedDependencies: [
+      {
+        schema_set: interaction.schemaSet,
+        schema_set_digest: interaction.schemaSetDigest,
+      },
+    ],
+  });
+}
+
+export function loadExecutionWireSchemaSet({
+  root = defaultExecutionSchemaRoot(),
+  v1Root = defaultExecutionV1SchemaRoot(),
+} = {}) {
+  const interaction = loadWireSchemaSet();
+  const executionV1 = loadExecutionWireSchemaSetV1({ root: v1Root });
+  return loadSchemaSet({
+    root,
+    manifestName: EXECUTION_MANIFEST_NAME,
     expectedSchemaSet: EXECUTION_WIRE_SCHEMA_SET,
     expectedDigest: EXECUTION_WIRE_SCHEMA_SET_DIGEST,
     expectedDependencies: [
       {
         schema_set: interaction.schemaSet,
         schema_set_digest: interaction.schemaSetDigest,
+      },
+      {
+        schema_set: executionV1.schemaSet,
+        schema_set_digest: executionV1.schemaSetDigest,
       },
     ],
   });

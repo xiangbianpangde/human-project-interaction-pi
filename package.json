@@ -1,6 +1,6 @@
 {
   "name": "human-project-interaction-pi",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "Read-only Human Project State, frozen interaction/execution wire schemas, pure retry/stale previews, deterministic escalation gate, session candidate outbox, and /talk project interaction surface for Pi.",
@@ -19,6 +19,7 @@
     "node": ">=20"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1"
   }

@@ -1,14 +1,14 @@
 import { sha256, validateSourceRef } from "../contracts.mjs";
 
-export const EXECUTION_WIRE_CODEC_VERSION = "hpi-execution-wire-codec/1.0.0";
+export const EXECUTION_WIRE_CODEC_VERSION = "hpi-execution-wire-codec/2.0.0";
 
 export const EXECUTION_WIRE_OBJECT_SCHEMAS = Object.freeze({
-  task_slice: "urn:hpi:wire:task-slice:v1",
-  handoff_bundle: "urn:hpi:wire:handoff-bundle:v1",
-  attempt: "urn:hpi:wire:attempt:v1",
-  evidence: "urn:hpi:wire:evidence:v1",
-  result_bundle: "urn:hpi:wire:result-bundle:v1",
-  stale_report: "urn:hpi:wire:stale-report:v1",
+  task_slice: "urn:hpi:wire:task-slice:v2",
+  handoff_bundle: "urn:hpi:wire:handoff-bundle:v2",
+  attempt: "urn:hpi:wire:attempt:v2",
+  evidence: "urn:hpi:wire:evidence:v2",
+  result_bundle: "urn:hpi:wire:result-bundle:v2",
+  stale_report: "urn:hpi:wire:stale-report:v2",
 });
 
 export const EXECUTION_AGENT_ROLES = Object.freeze([
@@ -77,7 +77,8 @@ export const RETRYABLE_ATTEMPT_STATUSES = Object.freeze([
 ]);
 export const MECHANICAL_STALE_RELATIONS = Object.freeze(["tests", "derives", "uses", "generated_by"]);
 const SHA256 = /^[a-f0-9]{64}$/u;
-const SCOPED_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$)).+$/u;
+const RFC3339_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$/u;
+const WINDOWS_DRIVE = /^[A-Za-z]:/u;
 
 export class ExecutionContractError extends Error {
   constructor(path, message, details = {}) {
@@ -115,7 +116,33 @@ export function nonEmpty(value, path) {
 
 export function timestamp(value, path) {
   nonEmpty(value, path);
-  if (Number.isNaN(Date.parse(value))) fail(path, "must be an ISO-compatible timestamp");
+  const match = RFC3339_DATE_TIME.exec(value);
+  if (!match) fail(path, "must be an RFC3339 date-time with an explicit timezone");
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, zone] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const zoneHour = zone === "Z" ? 0 : Number(zone.slice(1, 3));
+  const zoneMinute = zone === "Z" ? 0 : Number(zone.slice(4, 6));
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > daysInMonth[month - 1] ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    zoneHour > 23 ||
+    zoneMinute > 59 ||
+    Number.isNaN(Date.parse(value))
+  ) {
+    fail(path, "must be a valid RFC3339 date-time");
+  }
   return value;
 }
 
@@ -153,17 +180,22 @@ export function frozenRef(value, path) {
   };
 }
 
+export function frozenIdentityKey(value, path = "frozenRef") {
+  const ref = frozenRef(value, path);
+  return JSON.stringify([ref.id, ref.revision, ref.sha256]);
+}
+
+export function sameFrozenIdentity(left, right, path = "frozenRef") {
+  return frozenIdentityKey(left, `${path}.left`) === frozenIdentityKey(right, `${path}.right`);
+}
+
 export function frozenRefs(value, path, { min = 0, sort = true } = {}) {
   const output = arrayAt(value, path).map((entry, index) => frozenRef(entry, `${path}[${index}]`));
   if (output.length < min) fail(path, `must contain at least ${min} item(s)`);
-  const keys = output.map((entry) => `${entry.id}\u0000${entry.revision}\u0000${entry.sha256}`);
+  const keys = output.map((entry, index) => frozenIdentityKey(entry, `${path}[${index}]`));
   if (new Set(keys).size !== keys.length) fail(path, "must not contain duplicate frozen refs");
   return sort
-    ? output.toSorted((left, right) =>
-        `${left.id}\u0000${left.revision}\u0000${left.sha256}`.localeCompare(
-          `${right.id}\u0000${right.revision}\u0000${right.sha256}`,
-        ),
-      )
+    ? output.toSorted((left, right) => frozenIdentityKey(left).localeCompare(frozenIdentityKey(right)))
     : output;
 }
 
@@ -181,6 +213,23 @@ export function agent(value, path) {
   };
 }
 
+function scopedPath(value, path) {
+  nonEmpty(value, path);
+  if (
+    value.startsWith("/") ||
+    WINDOWS_DRIVE.test(value) ||
+    value.includes("\\") ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    fail(path, "must use a host-independent POSIX project-relative path");
+  }
+  const segments = value.split("/");
+  if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) {
+    fail(path, "must not contain empty, '.', or '..' path segments");
+  }
+  return value;
+}
+
 export function permissionScope(value, path) {
   const object = exactKeys(
     value,
@@ -191,7 +240,7 @@ export function permissionScope(value, path) {
   const allowedPaths = strings(object.allowedPaths, `${path}.allowedPaths`, { min: 1 });
   const forbiddenPaths = strings(object.forbiddenPaths, `${path}.forbiddenPaths`);
   for (const [index, candidate] of [...allowedPaths, ...forbiddenPaths].entries()) {
-    if (!SCOPED_PATH.test(candidate)) fail(`${path}.paths[${index}]`, "must be a project-relative scoped path without '..'");
+    scopedPath(candidate, `${path}.paths[${index}]`);
   }
   const overlap = allowedPaths.find((candidate) => forbiddenPaths.includes(candidate));
   if (overlap) fail(path, `allowed_paths and forbidden_paths overlap at ${overlap}`);
@@ -287,6 +336,6 @@ export function wireRecordRef(record, { idKey, revisionKey, pointer } = {}) {
 }
 
 export function idempotencyKey(kind, payload) {
-  return sha256({ schema: "hpi/execution-idempotency/v1", kind, payload });
+  return sha256({ schema: "hpi/execution-idempotency/v2", kind, payload });
 }
 

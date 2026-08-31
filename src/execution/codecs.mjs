@@ -15,12 +15,14 @@ import {
   exactKeys,
   fail,
   failure,
+  frozenIdentityKey,
   frozenRef,
   frozenRefs,
   idempotencyKey,
   nextAttempt,
   nonEmpty,
   permissionScope,
+  sameFrozenIdentity,
   sameLogicalSupersedes,
   sealRecord,
   strings,
@@ -106,7 +108,7 @@ export function toWireTaskSlice(value) {
   }
   const supersedes = sameLogicalSupersedes(object.supersedes, taskId, "taskSlice.supersedes");
   const draft = {
-    schema: "hpi/wire/task-slice/v1",
+    schema: "hpi/wire/task-slice/v2",
     task_id: taskId,
     project_id: nonEmpty(object.projectId, "taskSlice.projectId"),
     title: nonEmpty(object.title, "taskSlice.title"),
@@ -205,7 +207,7 @@ export function toWireHandoffBundle(value) {
   };
   return sealRecord(
     {
-      schema: "hpi/wire/handoff-bundle/v1",
+      schema: "hpi/wire/handoff-bundle/v2",
       ...semantic,
       idempotency_key: idempotencyKey("handoff", {
         task_ref: taskRef,
@@ -285,7 +287,7 @@ export function toWireAttempt(value) {
   const supersedes = sameLogicalSupersedes(object.supersedes, attemptId, "attempt.supersedes");
   return sealRecord(
     {
-      schema: "hpi/wire/attempt/v1",
+      schema: "hpi/wire/attempt/v2",
       attempt_id: attemptId,
       task_ref: frozenRef(object.taskRef, "attempt.taskRef"),
       handoff_ref: frozenRef(object.handoffRef, "attempt.handoffRef"),
@@ -369,7 +371,7 @@ export function toWireEvidence(value) {
   const supersedes = sameLogicalSupersedes(object.supersedes, evidenceId, "evidence.supersedes");
   return sealRecord(
     {
-      schema: "hpi/wire/evidence/v1",
+      schema: "hpi/wire/evidence/v2",
       evidence_id: evidenceId,
       task_ref: frozenRef(object.taskRef, "evidence.taskRef"),
       attempt_id: nonEmpty(object.attemptId, "evidence.attemptId"),
@@ -433,8 +435,8 @@ export function toWireResultBundle(value) {
   const taskRef = frozenRef(object.taskRef, "resultBundle.taskRef");
   const handoffRef = frozenRef(object.handoffRef, "resultBundle.handoffRef");
   const attemptRecord = object.attemptRecord;
-  if (attemptRecord?.schema !== "hpi/wire/attempt/v1") {
-    fail("resultBundle.attemptRecord.schema", "must be a sealed Attempt v1 record");
+  if (attemptRecord?.schema !== "hpi/wire/attempt/v2") {
+    fail("resultBundle.attemptRecord.schema", "must be a sealed Attempt v2 record");
   }
   assertWireRecordRevision(attemptRecord, "attempt_revision", "resultBundle.attemptRecord");
   for (const [name, expected, actual] of [
@@ -464,35 +466,57 @@ export function toWireResultBundle(value) {
   }
   const evidenceRecords = arrayAt(object.evidenceRecords, "resultBundle.evidenceRecords")
     .map((entry, index) => {
-      if (entry?.schema !== "hpi/wire/evidence/v1") {
-        fail(`resultBundle.evidenceRecords[${index}].schema`, "must be a sealed Evidence v1 record");
+      const path = `resultBundle.evidenceRecords[${index}]`;
+      if (entry?.schema !== "hpi/wire/evidence/v2") {
+        fail(`${path}.schema`, "must be a sealed Evidence v2 record");
       }
-      assertWireRecordRevision(entry, "evidence_revision", `resultBundle.evidenceRecords[${index}]`);
-      if (entry.task_ref.id !== taskRef.id) {
-        fail(`resultBundle.evidenceRecords[${index}].task_ref.id`, "must match task_ref.id");
+      assertWireRecordRevision(entry, "evidence_revision", path);
+      if (!sameFrozenIdentity(entry.task_ref, taskRef, `${path}.task_ref`)) {
+        fail(`${path}.task_ref`, "must exactly match task_ref id, revision, and sha256");
       }
       if (entry.attempt_id !== attemptRef.id) {
-        fail(`resultBundle.evidenceRecords[${index}].attempt_id`, "must match attempt_ref.id");
+        fail(`${path}.attempt_id`, "must match attempt_ref.id");
       }
       return structuredClone(entry);
     })
     .toSorted((left, right) => left.evidence_id.localeCompare(right.evidence_id));
-  const evidenceIds = new Set(evidenceRecords.map((entry) => entry.evidence_id));
-  for (const [factIndex, fact] of machineResult.facts.entries()) {
-    for (const [refIndex, ref] of fact.evidence_refs.entries()) {
-      if (!evidenceIds.has(ref.id)) {
-        fail(
-          `resultBundle.machineResult.facts[${factIndex}].evidence_refs[${refIndex}].id`,
-          "must resolve to an Evidence record carried by the bundle",
-        );
-      }
+  const evidenceIds = new Set();
+  const evidenceByIdentity = new Map();
+  for (const [index, record] of evidenceRecords.entries()) {
+    if (evidenceIds.has(record.evidence_id)) {
+      fail(
+        `resultBundle.evidenceRecords[${index}].evidence_id`,
+        "must be unique inside one ResultBundle; multiple revisions are ambiguous",
+      );
     }
+    evidenceIds.add(record.evidence_id);
+    const recordRef = wireRecordRef(record, {
+      idKey: "evidence_id",
+      revisionKey: "evidence_revision",
+    });
+    evidenceByIdentity.set(frozenIdentityKey(recordRef), record);
   }
-  if (
-    machineResult.verdict === "PASS-ENGINEERING" &&
-    !evidenceRecords.some((entry) => ["HARNESS_VERIFIED", "INDEPENDENTLY_VALIDATED"].includes(entry.status))
-  ) {
-    fail("resultBundle.evidenceRecords", "PASS-ENGINEERING requires harness-verified or independently validated evidence");
+  const trustedStatuses = new Set(["HARNESS_VERIFIED", "INDEPENDENTLY_VALIDATED"]);
+  for (const [factIndex, fact] of machineResult.facts.entries()) {
+    let hasTrustedEvidence = false;
+    for (const [refIndex, ref] of fact.evidence_refs.entries()) {
+      const path = `resultBundle.machineResult.facts[${factIndex}].evidence_refs[${refIndex}]`;
+      const record = evidenceByIdentity.get(frozenIdentityKey(ref, path));
+      if (!record) {
+        fail(path, "must exactly resolve to a carried Evidence id, revision, and sha256");
+      }
+      if (trustedStatuses.has(record.status)) hasTrustedEvidence = true;
+    }
+    if (
+      machineResult.verdict === "PASS-ENGINEERING" &&
+      fact.status === "VERIFIED" &&
+      !hasTrustedEvidence
+    ) {
+      fail(
+        `resultBundle.machineResult.facts[${factIndex}].evidence_refs`,
+        "a VERIFIED PASS fact must directly reference harness-verified or independently validated Evidence",
+      );
+    }
   }
   const failureRecord = failure(object.failure, "resultBundle.failure");
   if (machineResult.verdict === "PASS-ENGINEERING" && failureRecord.kind !== "NONE") {
@@ -517,7 +541,7 @@ export function toWireResultBundle(value) {
   };
   return sealRecord(
     {
-      schema: "hpi/wire/result-bundle/v1",
+      schema: "hpi/wire/result-bundle/v2",
       ...semantic,
       idempotency_key: idempotencyKey("result-bundle", {
         task_ref: taskRef,
