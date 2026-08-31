@@ -1,0 +1,247 @@
+{
+  "schema_set": "hpi/wire/v1",
+  "fixture_authority": "SYNTHETIC_TEST_ONLY_NOT_PROJECT_CANONICAL",
+  "instances": {
+    "machine_result": {
+      "schema": "hpi/wire/machine-result/v1",
+      "result_id": "MR-FIXTURE-001",
+      "task_id": "TS-FIXTURE-001",
+      "attempt_id": "attempt-not-run",
+      "result_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "source_ref": {
+        "id": "SOURCE-FIXTURE-001",
+        "revision": "1",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pointer": "fixtures/source.md"
+      },
+      "verdict": "NOT-RUN",
+      "facts": [
+        {
+          "fact_id": "FACT-FIXTURE-NOT-RUN",
+          "kind": "TEST",
+          "statement": "合成测试尚未运行。",
+          "status": "NOT_RUN",
+          "evidence_refs": [
+            {
+              "id": "SOURCE-FIXTURE-001",
+              "revision": "1",
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "pointer": "fixtures/source.md"
+            }
+          ]
+        }
+      ],
+      "limitations": ["这是纯数据 fixture，不是运行证据。"],
+      "unresolved": ["仍需真实 Harness 执行。"]
+    },
+    "hps": {
+      "schema": "hpi/wire/hps/v1",
+      "project_id": "HPI-FIXTURE-PROJECT",
+      "projection_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "projector_revision": "hpi-projector/fixture",
+      "source_snapshot": [
+        {
+          "id": "SOURCE-FIXTURE-001",
+          "revision": "1",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pointer": "fixtures/source.md"
+        }
+      ],
+      "source_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "phase": "HUMAN_DECISION_PENDING",
+      "intent": {
+        "statement": "验证 HPI wire v1 的纯数据合同。",
+        "source_ref": {
+          "id": "SOURCE-FIXTURE-001",
+          "revision": "1",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pointer": "fixtures/source.md"
+        }
+      },
+      "pains": [
+        {
+          "pain_id": "P-FIXTURE-001",
+          "statement": "混合命名会造成跨宿主协议漂移。",
+          "status": "PARTIAL",
+          "remaining_gap": "尚未接入真实 Bundle。",
+          "source_ref": {
+            "id": "SOURCE-FIXTURE-001",
+            "revision": "1",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "pointer": "fixtures/source.md"
+          }
+        }
+      ],
+      "active_work": [
+        {
+          "task_id": "TS-FIXTURE-001",
+          "why_now": "先冻结 wire contract。",
+          "machine_status": "NOT-RUN",
+          "human_status": "HUMAN_PENDING",
+          "latest_change": "新增 JSON Schema fixture。"
+        }
+      ],
+      "changes_since_last_seen": ["新增 JSON Schema fixture。"],
+      "unresolved": [
+        {
+          "unresolved_id": "U-FIXTURE-001",
+          "statement": "真实 Bundle 仍未接入。",
+          "source_ref": {
+            "id": "SOURCE-FIXTURE-001",
+            "revision": "1",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "pointer": "fixtures/source.md"
+          }
+        }
+      ],
+      "risks": ["fixture 不能被解释为项目完成。"],
+      "decision_request_ids": ["ER-FIXTURE-001"],
+      "evidence_summary": {
+        "verified": 0,
+        "self_reported": 0,
+        "not_run": 1,
+        "incomplete": 0
+      },
+      "trace_link_ids": ["TL-FIXTURE-001"]
+    },
+    "human_brief": {
+      "schema": "hpi/wire/human-brief/v1",
+      "brief_id": "HB-FIXTURE-001",
+      "project_id": "HPI-FIXTURE-PROJECT",
+      "subject_ref": {
+        "id": "SOURCE-FIXTURE-001",
+        "revision": "1",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pointer": "fixtures/source.md"
+      },
+      "hps_projection_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "headline": "wire fixture 已准备；机器仍为 NOT-RUN。",
+      "why_now": "先冻结外部命名和必填字段。",
+      "pain_refs": ["P-FIXTURE-001"],
+      "design_point": "外部 snake_case，内部 camelCase，仅显式 codec 跨边界。",
+      "changed": ["新增 JSON Schema fixture。"],
+      "machine_verified": [],
+      "not_verified": ["[NOT-RUN] 未执行真实测试。"],
+      "remaining": ["真实 Bundle 仍未接入。"],
+      "next_and_reason": {
+        "statement": "验证所有正负 fixture。",
+        "reason": "Schema 编译和拒绝语义是进入 runtime 前置。"
+      },
+      "human_decision": {
+        "required": true,
+        "request_ref": "ER-FIXTURE-001"
+      },
+      "risk_and_consequence": ["fixture 不能成为 HumanResult。"],
+      "drill_down": {
+        "trace_refs": ["TL-FIXTURE-001"],
+        "evidence_refs": [],
+        "source_refs": [
+          {
+            "id": "SOURCE-FIXTURE-001",
+            "revision": "1",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "pointer": "fixtures/source.md"
+          }
+        ]
+      }
+    },
+    "escalation_request": {
+      "schema": "hpi/wire/escalation-request/v1",
+      "request_id": "ER-FIXTURE-001",
+      "project_id": "HPI-FIXTURE-PROJECT",
+      "gate_revision": "hpi-escalation-gate/fixture",
+      "category": "DESIGN",
+      "decision_unit": "wire-naming",
+      "question": "是否采用外部 snake_case 的设计？",
+      "current_facts": [
+        {
+          "statement": "当前内部实现使用 camelCase。",
+          "source_ref": {
+            "id": "SOURCE-FIXTURE-001",
+            "revision": "1",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "pointer": "fixtures/source.md"
+          },
+          "evidence_status": "VERIFIED"
+        }
+      ],
+      "options": [
+        {
+          "option_id": "snake-wire",
+          "label": "外部使用 snake_case",
+          "consequences": "通过 codec 保持内部兼容。",
+          "risks": "需要维护明确边界。",
+          "reversibility": false
+        },
+        {
+          "option_id": "revise-contract",
+          "label": "要求修订合同",
+          "consequences": "保持当前 Gate 未关闭。",
+          "risks": "真实 Adapter 接入继续后置。",
+          "reversibility": true
+        }
+      ],
+      "recommendation": "外部采用 snake_case，禁止混合键。",
+      "safe_default_if_no_answer": "NO_STATE_CHANGE",
+      "affected_revisions": [
+        {
+          "id": "SOURCE-FIXTURE-001",
+          "revision": "1",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pointer": "fixtures/source.md"
+        }
+      ],
+      "request_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "one_question": true
+    },
+    "human_result": {
+      "schema": "hpi/wire/human-result/v1",
+      "human_result_id": "HR-FIXTURE-001",
+      "request_id": "ER-FIXTURE-001",
+      "decision_revision": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "source_ref": {
+        "id": "SOURCE-FIXTURE-001",
+        "revision": "1",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pointer": "fixtures/source.md"
+      },
+      "decision_kind": "ACCEPT_WITH_CONDITIONS",
+      "selected_option": "snake-wire",
+      "statement": "仅作为 Schema 正向 fixture。",
+      "accepted_conditions": ["不得据此生成项目 HumanResult。"],
+      "affected_revisions": [
+        {
+          "id": "SOURCE-FIXTURE-001",
+          "revision": "1",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pointer": "fixtures/source.md"
+        }
+      ],
+      "actor": {
+        "kind": "human",
+        "id": "synthetic-fixture-actor"
+      },
+      "captured_at": "2026-08-30T00:00:00.000Z",
+      "explicitness": "explicit"
+    },
+    "trace_link": {
+      "schema": "hpi/wire/trace-link/v1",
+      "link_id": "TL-FIXTURE-001",
+      "from_ref": {
+        "id": "P-FIXTURE-001",
+        "revision": "1"
+      },
+      "to_ref": {
+        "id": "TS-FIXTURE-001",
+        "revision": "1"
+      },
+      "relation": "motivates",
+      "source_ref": {
+        "id": "SOURCE-FIXTURE-001",
+        "revision": "1",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pointer": "fixtures/source.md"
+      }
+    }
+  }
+}

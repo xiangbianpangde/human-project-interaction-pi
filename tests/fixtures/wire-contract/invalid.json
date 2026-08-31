@@ -1,0 +1,136 @@
+{
+  "schema_set": "hpi/wire/v1",
+  "fixture_authority": "SYNTHETIC_TEST_ONLY_NOT_PROJECT_CANONICAL",
+  "cases": [
+    {
+      "name": "mixed camelCase key is rejected",
+      "schema": "hps",
+      "base": "hps",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["projectId"],
+          "value": "HPI-FIXTURE-PROJECT"
+        }
+      ],
+      "expected_keyword": "additionalProperties",
+      "expected_path": ""
+    },
+    {
+      "name": "required Human Brief remaining is absent",
+      "schema": "human_brief",
+      "base": "human_brief",
+      "operations": [
+        {
+          "op": "delete",
+          "path": ["remaining"]
+        }
+      ],
+      "expected_keyword": "required",
+      "expected_path": ""
+    },
+    {
+      "name": "informal machine PASS is outside the closed enum",
+      "schema": "machine_result",
+      "base": "machine_result",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["verdict"],
+          "value": "PASS"
+        }
+      ],
+      "expected_keyword": "enum",
+      "expected_path": "/verdict"
+    },
+    {
+      "name": "verified machine fact needs evidence",
+      "schema": "machine_result",
+      "base": "machine_result",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["facts", 0, "status"],
+          "value": "VERIFIED"
+        },
+        {
+          "op": "set",
+          "path": ["facts", 0, "evidence_refs"],
+          "value": []
+        }
+      ],
+      "expected_keyword": "minItems",
+      "expected_path": "/facts/0/evidence_refs"
+    },
+    {
+      "name": "machine fact cannot become a human category",
+      "schema": "escalation_request",
+      "base": "escalation_request",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["category"],
+          "value": "MACHINE_FACT"
+        }
+      ],
+      "expected_keyword": "enum",
+      "expected_path": "/category"
+    },
+    {
+      "name": "HumanResult actor cannot be an agent",
+      "schema": "human_result",
+      "base": "human_result",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["actor", "kind"],
+          "value": "agent"
+        }
+      ],
+      "expected_keyword": "const",
+      "expected_path": "/actor/kind"
+    },
+    {
+      "name": "TraceLink relation is closed",
+      "schema": "trace_link",
+      "base": "trace_link",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["relation"],
+          "value": "trusts"
+        }
+      ],
+      "expected_keyword": "enum",
+      "expected_path": "/relation"
+    },
+    {
+      "name": "HPS machine status cannot use aggregate PASS",
+      "schema": "hps",
+      "base": "hps",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["active_work", 0, "machine_status"],
+          "value": "PASS"
+        }
+      ],
+      "expected_keyword": "enum",
+      "expected_path": "/active_work/0/machine_status"
+    },
+    {
+      "name": "escalation options must remain an array",
+      "schema": "escalation_request",
+      "base": "escalation_request",
+      "operations": [
+        {
+          "op": "set",
+          "path": ["options"],
+          "value": "accept"
+        }
+      ],
+      "expected_keyword": "type",
+      "expected_path": "/options"
+    }
+  ]
+}

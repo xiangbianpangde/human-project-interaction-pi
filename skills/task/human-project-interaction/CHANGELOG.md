@@ -1,0 +1,30 @@
+# Changelog
+
+## 0.4.0 - 2026-08-30
+
+- Require both immutable `hpi/wire/v1` and dependent `hpi/wire/execution/v1` digests during supported project re-entry.
+- Expose execution contract metadata without inferring Bundle records from source prose.
+- Keep Result replay, retry, and stale outputs candidate/preview-only; they cannot dispatch, commit, invalidate canonical state, or create HumanResult.
+- Preserve the R-ICL `INCOMPLETE` boundary while its authority set has no typed execution records and runtime intake is unavailable.
+
+## 0.3.0 - 2026-08-30
+
+- Require the frozen `hpi/wire/v1` schema set and pinned digest before rebuilding a supported projection.
+- Define snake_case-only external interoperability and reject mixed external/internal keys.
+- Add read-only `/hpi wire [id]` export without starting an Agent turn.
+- Keep camelCase internal and HumanResult intake/canonical writing unavailable.
+
+## 0.2.0 - 2026-08-30
+
+- Add explicit supported-Adapter detection and fail-closed behavior for unsupported roots.
+- Add the R-ICL v4 read-only Adapter while preserving TS-001 as a frozen pilot.
+- Prevent source PASS prose or isolated evidence from promoting the machine axis.
+- Require Adapter/source-snapshot digest integrity before rendering a Human Brief.
+- Distinguish source, HPS projection, and Human Brief content ids in `/talk` provenance.
+
+## 0.1.0 - 2026-08-30
+
+- Add the task-layer Human Project Interaction workflow.
+- Separate machine evidence from human intent, scope, design, risk, and semantic decisions.
+- Integrate deterministic `hpi_query` / `hpi_propose` tools with the `hpi-project` `/talk` style.
+- Define session-only CandidateEvent handling, stale detection, and TS-001 NOT-RUN protection.

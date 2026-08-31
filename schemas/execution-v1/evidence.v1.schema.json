@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:evidence:v1",
+  "title": "HPI Execution Wire v1 Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "evidence_id",
+    "evidence_revision",
+    "task_ref",
+    "attempt_id",
+    "kind",
+    "pointer",
+    "sha256",
+    "status",
+    "claim_refs",
+    "collected_by",
+    "verified_by",
+    "limitations",
+    "sensitivity",
+    "changed_fields",
+    "provenance_refs",
+    "created_at"
+  ],
+  "properties": {
+    "schema": { "const": "hpi/wire/evidence/v1" },
+    "evidence_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "evidence_revision": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" },
+    "task_ref": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "attempt_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "kind": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/evidence_kind" },
+    "pointer": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "sha256": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" },
+    "status": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/evidence_status" },
+    "claim_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "collected_by": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/agent" },
+    "verified_by": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/agent" }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "sensitivity": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/sensitivity" },
+    "supersedes": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "changed_fields": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/changed_fields" },
+    "provenance_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "type": "string", "enum": ["HARNESS_VERIFIED", "INDEPENDENTLY_VALIDATED"] }
+        },
+        "required": ["status"]
+      },
+      "then": { "properties": { "verified_by": { "type": "array", "minItems": 1 } } }
+    },
+    {
+      "if": {
+        "properties": { "status": { "type": "string", "const": "INDEPENDENTLY_VALIDATED" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "verified_by": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "required": ["role"],
+              "properties": { "role": { "type": "string", "const": "VALIDATION" } }
+            },
+            "minContains": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "type": "string", "const": "SELF_REPORTED" } },
+        "required": ["status"]
+      },
+      "then": { "properties": { "verified_by": { "type": "array", "maxItems": 0 } } }
+    },
+    {
+      "if": { "properties": { "supersedes": {} }, "required": ["supersedes"] },
+      "then": { "properties": { "changed_fields": { "type": "array", "minItems": 1 } } }
+    }
+  ]
+}

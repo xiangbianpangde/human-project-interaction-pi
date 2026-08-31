@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:attempt:v1",
+  "title": "HPI Execution Wire v1 Attempt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "attempt_id",
+    "attempt_revision",
+    "task_ref",
+    "handoff_ref",
+    "ordinal",
+    "status",
+    "workspace_ref",
+    "failure",
+    "changed_fields",
+    "provenance_refs",
+    "created_at"
+  ],
+  "properties": {
+    "schema": { "const": "hpi/wire/attempt/v1" },
+    "attempt_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "attempt_revision": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" },
+    "task_ref": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "handoff_ref": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "ordinal": { "type": "integer", "minimum": 1 },
+    "status": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/attempt_status" },
+    "workspace_ref": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "started_at": { "type": "string", "format": "date-time" },
+    "ended_at": { "type": "string", "format": "date-time" },
+    "retry_of": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "failure": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/failure" },
+    "terminal_result_ref": {
+      "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref",
+      "description": "ResultBundle referenced only by a later terminal Attempt revision."
+    },
+    "supersedes": {
+      "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref",
+      "description": "Previous revision of the same attempt_id; distinct from retry_of, which always points to a different attempt_id."
+    },
+    "changed_fields": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/changed_fields" },
+    "provenance_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "ordinal": { "type": "integer", "minimum": 2 } }, "required": ["ordinal"] },
+      "then": { "properties": { "retry_of": {} }, "required": ["retry_of"] }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "type": "string", "enum": ["RUNNING", "SUCCEEDED", "FAILED", "BLOCKED", "INTERRUPTED"] }
+        },
+        "required": ["status"]
+      },
+      "then": { "properties": { "started_at": {} }, "required": ["started_at"] }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "type": "string", "enum": ["SUCCEEDED", "FAILED", "BLOCKED", "INTERRUPTED", "CANCELLED"] }
+        },
+        "required": ["status"]
+      },
+      "then": { "properties": { "ended_at": {} }, "required": ["ended_at"] }
+    },
+    {
+      "if": { "properties": { "status": { "type": "string", "const": "SUCCEEDED" } }, "required": ["status"] },
+      "then": {
+        "required": ["terminal_result_ref"],
+        "properties": {
+          "terminal_result_ref": {},
+          "failure": {
+            "type": "object",
+            "properties": {
+              "kind": { "type": "string", "const": "NONE" },
+              "retryable": { "type": "boolean", "const": false }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": { "type": "string", "enum": ["FAILED", "BLOCKED", "INTERRUPTED", "CANCELLED"] }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "failure": {
+            "type": "object",
+            "properties": { "kind": { "type": "string", "not": { "const": "NONE" } } }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "supersedes": {} }, "required": ["supersedes"] },
+      "then": { "properties": { "changed_fields": { "type": "array", "minItems": 1 } } }
+    }
+  ]
+}

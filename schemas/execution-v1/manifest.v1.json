@@ -1,0 +1,61 @@
+{
+  "schema_set": "hpi/wire/execution/v1",
+  "naming": "snake_case",
+  "compatibility": {
+    "external_keys": "snake_case_only",
+    "internal_keys": "camelCase",
+    "mixed_keys": "rejected",
+    "inbound_runtime": "not_implemented"
+  },
+  "dependencies": [
+    {
+      "schema_set": "hpi/wire/v1",
+      "schema_set_digest": "1d08d1acdda0cf05b29aae46949c900e49349eb21225d75698c6a44c34264725"
+    }
+  ],
+  "schemas": [
+    {
+      "name": "execution_common",
+      "id": "urn:hpi:wire:execution-common:v1",
+      "path": "execution-common.v1.schema.json",
+      "sha256": "be4b9cab93d7ce6af41a064421a526b2782b08d87bfd8992c99526a1bfc7a6c2"
+    },
+    {
+      "name": "attempt",
+      "id": "urn:hpi:wire:attempt:v1",
+      "path": "attempt.v1.schema.json",
+      "sha256": "afe7103673d7aebd6b457df67590624f35cc9f8666ffb4e9568323accb11f431"
+    },
+    {
+      "name": "evidence",
+      "id": "urn:hpi:wire:evidence:v1",
+      "path": "evidence.v1.schema.json",
+      "sha256": "9581aba8a5b14dbb44ea3ecb59d8147f3e89bb2fab6857c207b1e24c94b5682e"
+    },
+    {
+      "name": "handoff_bundle",
+      "id": "urn:hpi:wire:handoff-bundle:v1",
+      "path": "handoff-bundle.v1.schema.json",
+      "sha256": "3c16f6ed31837742b00485fcbd91477ea14688eaa2e1d01c0fc4969dafbdd43f"
+    },
+    {
+      "name": "result_bundle",
+      "id": "urn:hpi:wire:result-bundle:v1",
+      "path": "result-bundle.v1.schema.json",
+      "sha256": "29e2f044c2d1de60e5e40096ce6b1757c84001ba2e24204be9df35b196b264f4"
+    },
+    {
+      "name": "stale_report",
+      "id": "urn:hpi:wire:stale-report:v1",
+      "path": "stale-report.v1.schema.json",
+      "sha256": "c9df988c6778b11a8ec2d8466ba2f58773c3a504397578d2ef49564e3072bd9b"
+    },
+    {
+      "name": "task_slice",
+      "id": "urn:hpi:wire:task-slice:v1",
+      "path": "task-slice.v1.schema.json",
+      "sha256": "97ffa2d77366cc12398079bf657dede407d052b4cf10d1dbf71813d8042bfeab"
+    }
+  ],
+  "schema_set_digest": "450698c6e3218b3419f081dc47576f94edaea36ee0da6a97b35c80ef6d9e88d1"
+}

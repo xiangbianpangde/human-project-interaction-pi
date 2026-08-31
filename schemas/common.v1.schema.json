@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:common:v1",
+  "title": "HPI Wire v1 Common Definitions",
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "source_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision"],
+      "properties": {
+        "id": { "$ref": "#/$defs/non_empty_string" },
+        "revision": { "$ref": "#/$defs/non_empty_string" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "pointer": { "$ref": "#/$defs/non_empty_string" }
+      }
+    },
+    "machine_verdict": {
+      "type": "string",
+      "enum": [
+        "NOT-RUN",
+        "RUNNING",
+        "PASS-ENGINEERING",
+        "INCOMPLETE",
+        "DEVIATIONS_FOUND",
+        "OUT_OF_SCOPE",
+        "BLOCKED"
+      ]
+    },
+    "human_status": {
+      "type": "string",
+      "enum": [
+        "NOT_NEEDED",
+        "HUMAN_PENDING",
+        "HUMAN_ACCEPTED",
+        "HUMAN_ACCEPTED_WITH_CONDITIONS",
+        "HUMAN_REJECTED",
+        "CHANGES_REQUESTED"
+      ]
+    },
+    "project_phase": {
+      "type": "string",
+      "enum": [
+        "ORIENTING",
+        "DESIGN_PENDING",
+        "READY_FOR_IMPLEMENTATION",
+        "EXECUTING",
+        "MACHINE_VALIDATION",
+        "HUMAN_DECISION_PENDING",
+        "PARTIALLY_SOLVED",
+        "SOLVED_PENDING_CONFIRMATION",
+        "CLOSED",
+        "BLOCKED",
+        "RECOVERY"
+      ]
+    },
+    "pain_status": {
+      "type": "string",
+      "enum": [
+        "OPEN",
+        "PARTIAL",
+        "SOLVED_PENDING_CONFIRMATION",
+        "SOLVED",
+        "NEEDS_REVIEW",
+        "OUT_OF_SCOPE"
+      ]
+    },
+    "fact_kind": {
+      "type": "string",
+      "enum": ["TEST", "HASH", "FILE", "REFERENCE", "PERMISSION", "OTHER"]
+    },
+    "fact_status": {
+      "type": "string",
+      "enum": ["VERIFIED", "FAILED", "NOT_RUN", "INCOMPLETE", "SELF_REPORTED"]
+    },
+    "human_category": {
+      "type": "string",
+      "enum": ["INTENT", "SCOPE", "DESIGN", "RISK", "IRREVERSIBLE", "SEMANTIC_OUTCOME"]
+    },
+    "human_decision": {
+      "type": "string",
+      "enum": ["ACCEPT_OPTION", "ACCEPT_WITH_CONDITIONS", "REJECT", "REQUEST_CHANGES"]
+    },
+    "trace_relation": {
+      "type": "string",
+      "enum": [
+        "motivates",
+        "refines",
+        "implements",
+        "tests",
+        "derives",
+        "uses",
+        "generated_by",
+        "reviewed_by",
+        "accepted_by",
+        "supersedes",
+        "invalidates",
+        "needs_review"
+      ]
+    }
+  }
+}

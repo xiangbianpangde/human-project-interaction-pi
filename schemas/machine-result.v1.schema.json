@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:machine-result:v1",
+  "title": "HPI Wire v1 MachineResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "result_id",
+    "task_id",
+    "attempt_id",
+    "result_revision",
+    "source_ref",
+    "verdict",
+    "facts",
+    "limitations",
+    "unresolved"
+  ],
+  "properties": {
+    "schema": { "const": "hpi/wire/machine-result/v1" },
+    "result_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "task_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "attempt_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "result_revision": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" },
+    "source_ref": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" },
+    "verdict": { "$ref": "urn:hpi:wire:common:v1#/$defs/machine_verdict" },
+    "facts": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/fact" }
+    },
+    "execution": { "$ref": "#/$defs/execution" },
+    "changes": { "$ref": "#/$defs/changes" },
+    "side_effects": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "unresolved": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["verdict"],
+        "properties": { "verdict": { "const": "PASS-ENGINEERING" } }
+      },
+      "then": {
+        "properties": {
+          "facts": {
+            "type": "array",
+            "contains": {
+              "type": "object",
+              "required": ["status"],
+              "properties": { "status": { "const": "VERIFIED" } }
+            },
+            "minContains": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fact_id", "kind", "statement", "status", "evidence_refs"],
+      "properties": {
+        "fact_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+        "kind": { "$ref": "urn:hpi:wire:common:v1#/$defs/fact_kind" },
+        "statement": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+        "status": { "$ref": "urn:hpi:wire:common:v1#/$defs/fact_status" },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": { "status": { "const": "VERIFIED" } }
+          },
+          "then": {
+            "properties": { "evidence_refs": { "type": "array", "minItems": 1 } }
+          }
+        }
+      ]
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "runtime", "environment", "exit_codes"],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+        },
+        "runtime": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+        "environment": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" },
+        "exit_codes": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 255 }
+        }
+      }
+    },
+    "changes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paths", "diff_refs", "artifact_shas"],
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+        },
+        "diff_refs": {
+          "type": "array",
+          "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" }
+        },
+        "artifact_shas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pointer", "sha256"],
+            "properties": {
+              "pointer": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+              "sha256": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HPI · 项目重入与决策</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --hpi-bg: var(--tk-bg, #f3f0e8);
+  --hpi-surface: var(--tk-surface, #fffdf8);
+  --hpi-ink: var(--tk-fg, #242823);
+  --hpi-muted: var(--tk-muted, #6e746d);
+  --hpi-line: var(--tk-border, #d9d7cc);
+  --hpi-accent: var(--tk-accent, #315c68);
+  --hpi-accent-soft: color-mix(in srgb, var(--hpi-accent) 10%, var(--hpi-surface));
+  --hpi-ok: var(--tk-ok, #487147);
+  --hpi-mid: var(--tk-mid, #9b6b17);
+  --hpi-no: var(--tk-no, #9a4438);
+  --hpi-info: var(--tk-info, #456d8f);
+  --hpi-shadow: var(--tk-shadow, 0 18px 48px rgba(45, 43, 35, .08));
+  --hpi-radius: var(--tk-radius, 16px);
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--hpi-accent) 8%, transparent), transparent 28rem),
+    var(--hpi-bg);
+  color: var(--hpi-ink);
+  font: 15px/1.65 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+button, textarea { font: inherit; }
+button { color: inherit; }
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: -5rem;
+  z-index: 100;
+  padding: .7rem 1rem;
+  border-radius: 10px;
+  background: var(--hpi-ink);
+  color: var(--hpi-surface);
+}
+.skip-link:focus { top: 1rem; }
+.hpi-shell { width: min(1180px, calc(100% - 32px)); margin: 0 auto; padding: 24px 0 64px; }
+.hpi-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid color-mix(in srgb, var(--hpi-accent) 30%, var(--hpi-line));
+  border-radius: 13px;
+  background: var(--hpi-accent-soft);
+  color: var(--hpi-accent);
+  font: 700 14px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .08em;
+}
+.brand-name { margin: 0; font-size: .92rem; font-weight: 750; letter-spacing: .02em; }
+.brand-meta { margin: .1rem 0 0; color: var(--hpi-muted); font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.refresh-button, .ghost-button, .decision-button {
+  appearance: none;
+  border: 1px solid var(--hpi-line);
+  border-radius: 11px;
+  background: var(--hpi-surface);
+  padding: .65rem .9rem;
+  cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, background .15s ease;
+}
+.refresh-button:hover, .ghost-button:hover, .decision-button:hover { transform: translateY(-1px); border-color: var(--hpi-accent); }
+.refresh-button:focus-visible, .ghost-button:focus-visible, .decision-button:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--hpi-accent) 28%, transparent);
+  outline-offset: 2px;
+}
+.hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--hpi-line);
+  border-radius: calc(var(--hpi-radius) + 6px);
+  background: var(--hpi-surface);
+  box-shadow: var(--hpi-shadow);
+  padding: clamp(24px, 4vw, 48px);
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  right: -5rem;
+  top: -7rem;
+  width: 18rem;
+  height: 18rem;
+  border: 1px solid color-mix(in srgb, var(--hpi-accent) 20%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2.2rem color-mix(in srgb, var(--hpi-accent) 3%, transparent), 0 0 0 4.4rem color-mix(in srgb, var(--hpi-accent) 2%, transparent);
+  pointer-events: none;
+}
+.eyebrow, .layer-label {
+  color: var(--hpi-accent);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.hero h1 {
+  position: relative;
+  max-width: 860px;
+  margin: .55rem 0 .7rem;
+  font: 650 clamp(2rem, 5vw, 4.2rem)/1.08 ui-serif, Georgia, "Songti SC", serif;
+  letter-spacing: -.035em;
+}
+.intent { position: relative; max-width: 820px; margin: 0; color: var(--hpi-muted); font-size: clamp(1rem, 1.7vw, 1.18rem); }
+.axis-grid { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 28px 0 0; }
+.axis-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--hpi-line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--hpi-surface) 92%, var(--hpi-bg));
+}
+.axis-name { color: var(--hpi-muted); font-size: .76rem; font-weight: 700; }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  gap: 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: .3rem .62rem;
+  font: 800 .74rem/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .02em;
+}
+.status-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.tone-ok { color: var(--hpi-ok); background: color-mix(in srgb, var(--hpi-ok) 9%, transparent); }
+.tone-mid { color: var(--hpi-mid); background: color-mix(in srgb, var(--hpi-mid) 9%, transparent); }
+.tone-no { color: var(--hpi-no); background: color-mix(in srgb, var(--hpi-no) 9%, transparent); }
+.tone-info { color: var(--hpi-info); background: color-mix(in srgb, var(--hpi-info) 9%, transparent); }
+.axis-explain { margin: .18rem 0 0; color: var(--hpi-muted); font-size: .78rem; }
+.hero-facts { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.fact-card { border-left: 3px solid var(--hpi-accent); padding: 12px 14px; background: var(--hpi-accent-soft); border-radius: 3px 12px 12px 3px; }
+.fact-card h2 { margin: 0 0 .3rem; color: var(--hpi-muted); font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; }
+.fact-card p { margin: 0; font-weight: 650; }
+.section { margin-top: 18px; border: 1px solid var(--hpi-line); border-radius: var(--hpi-radius); background: var(--hpi-surface); box-shadow: 0 8px 28px rgba(45, 43, 35, .045); }
+.section-inner { padding: clamp(20px, 3vw, 32px); }
+.section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+.section-head h2 { margin: .2rem 0 0; font: 650 clamp(1.45rem, 2.6vw, 2.1rem)/1.15 ui-serif, Georgia, "Songti SC", serif; }
+.section-note { max-width: 460px; margin: 0; color: var(--hpi-muted); font-size: .84rem; text-align: right; }
+.semantic-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.semantic-card { min-width: 0; border: 1px solid var(--hpi-line); border-radius: 13px; padding: 15px 16px; background: color-mix(in srgb, var(--hpi-surface) 95%, var(--hpi-bg)); }
+.semantic-card.wide { grid-column: 1 / -1; }
+.semantic-card h3 { margin: 0 0 .45rem; color: var(--hpi-muted); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; }
+.semantic-card p { margin: 0; }
+.pain-list, .plain-list, .evidence-list, .trace-list { list-style: none; margin: 0; padding: 0; }
+.pain-item, .list-item { padding: .7rem 0; border-top: 1px solid var(--hpi-line); }
+.pain-item:first-child, .list-item:first-child { border-top: 0; padding-top: 0; }
+.pain-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.pain-text { font-weight: 650; }
+.pain-gap { margin: .3rem 0 0; color: var(--hpi-muted); font-size: .82rem; }
+.critical-strip {
+  margin-top: 14px;
+  border: 1px solid color-mix(in srgb, var(--hpi-mid) 45%, var(--hpi-line));
+  border-left: 5px solid var(--hpi-mid);
+  border-radius: 13px;
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--hpi-mid) 8%, var(--hpi-surface));
+}
+.critical-strip h3 { margin: 0 0 .5rem; font-size: .86rem; }
+.critical-strip .list-item { border-color: color-mix(in srgb, var(--hpi-mid) 20%, var(--hpi-line)); }
+.quad-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+.quad-card { border: 1px solid var(--hpi-line); border-radius: 13px; padding: 15px 16px; }
+.quad-card h3 { margin: 0 0 .55rem; font-size: .84rem; }
+.quad-card.remaining { border-color: color-mix(in srgb, var(--hpi-mid) 35%, var(--hpi-line)); }
+.quad-card.risk { border-color: color-mix(in srgb, var(--hpi-no) 28%, var(--hpi-line)); }
+.empty { color: var(--hpi-muted); font-style: italic; }
+.decision-panel { border-color: color-mix(in srgb, var(--hpi-accent) 35%, var(--hpi-line)); }
+.decision-question { margin: 0 0 16px; font: 650 clamp(1.25rem, 2.3vw, 1.75rem)/1.32 ui-serif, Georgia, "Songti SC", serif; }
+.decision-context { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: 12px; }
+.recommendation { border: 1px solid var(--hpi-line); border-radius: 13px; padding: 14px 16px; background: var(--hpi-accent-soft); }
+.recommendation h3 { margin: 0 0 .3rem; font-size: .78rem; color: var(--hpi-accent); }
+.recommendation p { margin: 0; }
+.decision-options { display: grid; gap: 10px; margin-top: 14px; }
+.option-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid var(--hpi-line); border-radius: 13px; padding: 13px 14px; }
+.option-label { margin: 0; font-weight: 720; }
+.option-meta { margin: .2rem 0 0; color: var(--hpi-muted); font-size: .8rem; }
+.decision-button.primary { border-color: var(--hpi-accent); background: var(--hpi-accent); color: white; }
+.change-box { margin-top: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.change-box textarea { min-height: 78px; resize: vertical; border: 1px solid var(--hpi-line); border-radius: 11px; background: var(--hpi-surface); color: var(--hpi-ink); padding: 10px 12px; }
+.decision-feedback { min-height: 1.5em; margin: 12px 0 0; color: var(--hpi-accent); font-size: .85rem; font-weight: 700; }
+.boundary-note { margin-top: 12px; color: var(--hpi-muted); font-size: .78rem; }
+details.drill { overflow: hidden; }
+details.drill > summary { display: flex; align-items: center; gap: 12px; cursor: pointer; list-style: none; padding: 18px 22px; font-weight: 750; }
+details.drill > summary::-webkit-details-marker { display: none; }
+details.drill > summary::before { content: "+"; display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid var(--hpi-line); border-radius: 8px; color: var(--hpi-accent); }
+details.drill[open] > summary::before { content: "−"; }
+details.drill > summary .summary-hint { margin-left: auto; color: var(--hpi-muted); font-size: .78rem; font-weight: 500; }
+.drill-body { border-top: 1px solid var(--hpi-line); padding: 20px 22px 24px; }
+.node-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.node-card { border: 1px solid var(--hpi-line); border-radius: 12px; padding: 12px 13px; }
+.node-type { color: var(--hpi-muted); font: 700 .68rem/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.node-label { margin: .45rem 0 0; font-size: .86rem; font-weight: 620; }
+.trace-list { margin-top: 14px; }
+.trace-item { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center; padding: .55rem 0; border-top: 1px solid var(--hpi-line); font: .78rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.trace-item:first-child { border-top: 0; }
+.trace-relation { color: var(--hpi-accent); font-weight: 800; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--hpi-line); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; min-width: 680px; font-size: .82rem; }
+th, td { padding: 10px 12px; border-bottom: 1px solid var(--hpi-line); text-align: left; vertical-align: top; }
+th { background: color-mix(in srgb, var(--hpi-surface) 88%, var(--hpi-bg)); color: var(--hpi-muted); font-size: .72rem; letter-spacing: .05em; text-transform: uppercase; }
+tr:last-child td { border-bottom: 0; }
+.code { font: .75rem/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+.footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; margin-top: 18px; padding: 18px 4px 0; color: var(--hpi-muted); font-size: .75rem; }
+.footer p { margin: 0; }
+.footer-code { text-align: right; }
+[data-hidden="true"] { display: none !important; }
+@media (max-width: 820px) {
+  .axis-grid, .hero-facts, .semantic-grid, .quad-grid, .decision-context { grid-template-columns: 1fr; }
+  .semantic-card.wide { grid-column: auto; }
+  .node-grid { grid-template-columns: 1fr 1fr; }
+  .section-head { align-items: flex-start; flex-direction: column; }
+  .section-note { text-align: left; }
+}
+@media (max-width: 560px) {
+  .hpi-shell { width: min(100% - 20px, 1180px); padding-top: 14px; }
+  .hpi-topbar { align-items: flex-start; }
+  .brand-meta { max-width: 54vw; }
+  .refresh-button { padding: .55rem .7rem; }
+  .hero { padding: 22px 18px; }
+  .axis-card, .option-row, .change-box, .footer { grid-template-columns: 1fr; }
+  .node-grid { grid-template-columns: 1fr; }
+  .trace-item { grid-template-columns: 1fr; }
+  .trace-relation::before { content: "↓ "; }
+  .footer-code { text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+}
+@media print {
+  body { background: white; color: #111; }
+  .hpi-shell { width: 100%; padding: 0; }
+  .refresh-button, .decision-button, .change-box { display: none !important; }
+  .hero, .section { box-shadow: none; break-inside: avoid; }
+  details.drill > .drill-body { display: block; }
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">跳到项目状态</a>
+<div class="hpi-shell">
+  <header class="hpi-topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">HPI</div>
+      <div>
+        <p class="brand-name">Human Project Interaction</p>
+        <p class="brand-meta" id="brand-meta">只读项目投影 · 候选决策 outbox</p>
+      </div>
+    </div>
+    <button class="refresh-button" id="refresh" type="button">↻ 请求刷新</button>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="eyebrow">L0 · Project Re-entry</div>
+      <h1 id="hero-title">正在载入项目状态…</h1>
+      <p class="intent" id="intent"></p>
+      <div class="axis-grid" aria-label="机器与人类双轴状态">
+        <article class="axis-card">
+          <div><div class="axis-name">Machine Result</div><div class="status-pill" id="machine-status"></div></div>
+          <p class="axis-explain" id="machine-explain"></p>
+        </article>
+        <article class="axis-card">
+          <div><div class="axis-name">Human Result</div><div class="status-pill" id="human-status"></div></div>
+          <p class="axis-explain" id="human-explain"></p>
+        </article>
+      </div>
+      <div class="hero-facts">
+        <article class="fact-card"><h2>最近变化</h2><p id="latest-change"></p></article>
+        <article class="fact-card"><h2>下一次人类判断</h2><p id="next-decision"></p></article>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="brief-title">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="layer-label">L1 · Human Brief</div><h2 id="brief-title">意义先于工程细节</h2></div>
+          <p class="section-note">默认只读语义层；机器证据和 provenance 可继续展开。</p>
+        </div>
+        <div class="semantic-grid">
+          <article class="semantic-card"><h3>为什么现在做</h3><p id="why-now"></p></article>
+          <article class="semantic-card"><h3>采用的设计</h3><p id="design-point"></p></article>
+          <article class="semantic-card wide"><h3>关联痛点</h3><ul class="pain-list" id="pain-list"></ul></article>
+        </div>
+        <article class="critical-strip" aria-labelledby="not-verified-title">
+          <h3 id="not-verified-title">机器未验证 / 自报 / 缺口（不可折叠）</h3>
+          <ul class="plain-list" id="not-verified-list"></ul>
+        </article>
+        <div class="quad-grid">
+          <article class="quad-card"><h3>这次改变了什么</h3><ul class="plain-list" id="changed-list"></ul></article>
+          <article class="quad-card"><h3>机器已验证</h3><ul class="plain-list" id="verified-list"></ul></article>
+          <article class="quad-card remaining"><h3>仍未解决</h3><ul class="plain-list" id="remaining-list"></ul></article>
+          <article class="quad-card risk"><h3>风险与边界</h3><ul class="plain-list" id="risk-list"></ul></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section decision-panel" id="decision-panel" aria-labelledby="decision-title">
+      <div class="section-inner">
+        <div class="section-head">
+          <div><div class="layer-label">One Decision · Candidate Only</div><h2 id="decision-title">现在真正需要你决定</h2></div>
+          <p class="section-note">一次只处理一个设计、范围或风险判断。</p>
+        </div>
+        <p class="decision-question" id="decision-question"></p>
+        <div class="decision-context">
+          <div><h3>当前事实</h3><ul class="plain-list" id="decision-facts"></ul></div>
+          <article class="recommendation"><h3>建议与安全默认</h3><p id="recommendation"></p><p class="boundary-note" id="safe-default"></p></article>
+        </div>
+        <div class="decision-options" id="decision-options"></div>
+        <div class="change-box">
+          <textarea id="change-statement" aria-label="希望怎样调整" placeholder="若需要调整，请只写这一项决定要改变什么…"></textarea>
+          <button class="decision-button" id="request-changes" type="button">提交修改候选</button>
+        </div>
+        <p class="decision-feedback" id="decision-feedback" role="status" aria-live="polite"></p>
+        <p class="boundary-note">按钮只生成 session CandidateEvent；不会变更机器测试状态，不会写入项目 canonical，也不等于 HumanResult。</p>
+      </div>
+    </section>
+
+    <details class="section drill" id="layer-l2">
+      <summary><span>L2 · 语义追踪图</span><span class="summary-hint">Pain → TaskSlice → Design / Result</span></summary>
+      <div class="drill-body"><div class="node-grid" id="node-grid"></div><ul class="trace-list" id="trace-list"></ul></div>
+    </details>
+
+    <details class="section drill" id="layer-l3">
+      <summary><span>L3 · Machine Result</span><span class="summary-hint">测试、状态、自报与限制</span></summary>
+      <div class="drill-body"><div class="table-wrap"><table><thead><tr><th>事实</th><th>类型</th><th>证据状态</th><th>证据指针</th></tr></thead><tbody id="machine-facts"></tbody></table></div><div class="quad-grid"><article class="quad-card"><h3>限制</h3><ul class="plain-list" id="limitations"></ul></article><article class="quad-card"><h3>未完成</h3><ul class="plain-list" id="machine-unresolved"></ul></article></div></div>
+    </details>
+
+    <details class="section drill" id="layer-l4">
+      <summary><span>L4 · Provenance / Raw Evidence</span><span class="summary-hint">revision、SHA 与 TraceLink</span></summary>
+      <div class="drill-body"><div class="table-wrap"><table><thead><tr><th>Source ID</th><th>Revision</th><th>SHA-256</th><th>Pointer</th></tr></thead><tbody id="sources"></tbody></table></div><ul class="trace-list" id="raw-traces"></ul></div>
+    </details>
+  </main>
+
+  <footer class="footer">
+    <p id="authority-boundary">只读投影；候选事件不是 canonical。</p>
+    <p class="footer-code"><span id="projection-id"></span><br><span id="brief-id"></span><br><span id="source-digest"></span></p>
+  </footer>
+</div>
+<script id="hpi-data" type="application/json">{{content}}</script>
+<script>
+(() => {
+  "use strict";
+  const machineMeta = Object.freeze({
+    "NOT-RUN": ["tone-mid", "未运行；不能由人类回答提升", "NOT-RUN"],
+    "RUNNING": ["tone-info", "机器执行仍在进行", "RUNNING"],
+    "PASS-ENGINEERING": ["tone-ok", "仅表示合同范围内工程通过", "PASS-ENGINEERING"],
+    "INCOMPLETE": ["tone-mid", "证据或运行结果不完整", "INCOMPLETE"],
+    "DEVIATIONS_FOUND": ["tone-no", "发现偏差，需要恢复或修正", "DEVIATIONS"],
+    "OUT_OF_SCOPE": ["tone-info", "当前切片明确不覆盖", "OUT OF SCOPE"],
+    "BLOCKED": ["tone-no", "失败关闭，等待前置条件", "BLOCKED"]
+  });
+  const humanMeta = Object.freeze({
+    "NOT_NEEDED": ["tone-info", "当前没有人类决定", "NOT NEEDED"],
+    "HUMAN_PENDING": ["tone-mid", "等待一个明确的人类判断", "HUMAN PENDING"],
+    "HUMAN_ACCEPTED": ["tone-ok", "已读取到正式 HumanResult", "ACCEPTED"],
+    "HUMAN_ACCEPTED_WITH_CONDITIONS": ["tone-mid", "接受附带条件，条件仍有效", "CONDITIONAL"],
+    "HUMAN_REJECTED": ["tone-no", "人类已拒绝当前选项", "REJECTED"],
+    "CHANGES_REQUESTED": ["tone-info", "人类已要求修改", "CHANGES"]
+  });
+  const $ = (selector) => document.querySelector(selector);
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    return node;
+  };
+  const list = (target, items, emptyText = "当前无内容") => {
+    const root = typeof target === "string" ? $(target) : target;
+    root.replaceChildren();
+    if (!Array.isArray(items) || items.length === 0) {
+      root.append(el("li", "list-item empty", emptyText));
+      return;
+    }
+    for (const item of items) root.append(el("li", "list-item", item));
+  };
+  const shortHash = (value) => typeof value === "string" && value.length > 18 ? `${value.slice(0, 10)}…${value.slice(-6)}` : String(value || "—");
+  const send = (type, payload) => {
+    if (typeof window.talkSend !== "function") {
+      $("#decision-feedback").textContent = "事件桥尚未就绪；未生成任何候选。";
+      return false;
+    }
+    window.talkSend(type, payload || {});
+    return true;
+  };
+  const status = (selector, value, metadata) => {
+    const node = $(selector);
+    const meta = metadata[value];
+    if (!meta) throw new Error(`HPI invalid status enum: ${value}`);
+    node.className = `status-pill ${meta[0]}`;
+    node.textContent = meta[2];
+    return meta[1];
+  };
+  const parse = () => {
+    const raw = $("#hpi-data").textContent.trim();
+    const data = JSON.parse(raw || "{}");
+    if (data.kind !== "hpi-project" || data.schema !== "hpi/talk/v1") throw new Error("Unsupported HPI talk payload");
+    if (Object.prototype.hasOwnProperty.call(data, "overallStatus")) throw new Error("overallStatus is forbidden");
+    if (!machineMeta[data.status && data.status.machine]) throw new Error("Invalid machine status");
+    if (!humanMeta[data.status && data.status.human]) throw new Error("Invalid human status");
+    if (data.status.machine === "NOT-RUN" && !(data.l1 && Array.isArray(data.l1.notVerified) && data.l1.notVerified.some((line) => String(line).includes("NOT-RUN")))) {
+      throw new Error("NOT-RUN must remain visible in L1");
+    }
+    return data;
+  };
+  const renderPain = (items) => {
+    const root = $("#pain-list");
+    root.replaceChildren();
+    for (const pain of items || []) {
+      const item = el("li", "pain-item");
+      const row = el("div", "pain-row");
+      row.append(el("span", "pain-text", pain.statement));
+      const badge = el("span", "status-pill tone-info", pain.status);
+      row.append(badge);
+      item.append(row, el("p", "pain-gap", `剩余：${pain.remainingGap || "—"}`));
+      root.append(item);
+    }
+    if (!root.children.length) root.append(el("li", "list-item empty", "当前无已关联痛点"));
+  };
+  const renderNodes = (nodes) => {
+    const root = $("#node-grid");
+    root.replaceChildren();
+    for (const node of nodes || []) {
+      const card = el("article", "node-card");
+      card.append(el("div", "node-type", `${node.type} · ${node.id}`), el("p", "node-label", node.label));
+      const state = node.machineStatus || node.humanStatus || node.status;
+      if (state) card.append(el("span", "status-pill tone-info", state));
+      root.append(card);
+    }
+  };
+  const renderTrace = (target, links) => {
+    const root = $(target);
+    root.replaceChildren();
+    for (const link of links || []) {
+      const item = el("li", "trace-item");
+      item.append(el("span", "code", link.from), el("span", "trace-relation", link.relation), el("span", "code", link.to));
+      root.append(item);
+    }
+    if (!root.children.length) root.append(el("li", "list-item empty", "当前无 TraceLink"));
+  };
+  const appendCell = (row, text, className) => row.append(el("td", className || "", text));
+  const renderMachine = (data) => {
+    const result = data.l3.machineResult;
+    const body = $("#machine-facts");
+    body.replaceChildren();
+    for (const fact of result.facts || []) {
+      const row = document.createElement("tr");
+      appendCell(row, fact.statement);
+      appendCell(row, fact.kind, "code");
+      appendCell(row, fact.status, "code");
+      appendCell(row, (fact.evidenceRefs || []).map((ref) => `${ref.id}@${ref.revision}`).join("\n") || "—", "code");
+      body.append(row);
+    }
+    list("#limitations", result.limitations, "没有声明限制（需要复核）");
+    list("#machine-unresolved", result.unresolved, "没有声明未完成项");
+  };
+  const renderSources = (data) => {
+    const body = $("#sources");
+    body.replaceChildren();
+    for (const source of data.l4.sources || []) {
+      const row = document.createElement("tr");
+      appendCell(row, source.id, "code");
+      appendCell(row, source.revision, "code");
+      const hashCell = el("td", "code", shortHash(source.sha256));
+      hashCell.title = source.sha256 || "";
+      row.append(hashCell);
+      appendCell(row, source.pointer || "—", "code");
+      body.append(row);
+    }
+    renderTrace("#raw-traces", (data.l4.traceLinks || []).map((link) => ({ from: link.from.id, relation: link.relation, to: link.to.id })));
+  };
+  const renderDecision = (data) => {
+    const request = data.decision;
+    const panel = $("#decision-panel");
+    if (!request) { panel.dataset.hidden = "true"; return; }
+    $("#decision-question").textContent = request.question;
+    list("#decision-facts", (request.facts || []).map((fact) => `[${fact.evidenceStatus}] ${fact.statement}`));
+    $("#recommendation").textContent = request.recommendation;
+    $("#safe-default").textContent = `不回答时：${request.safeDefault}。`;
+    const options = $("#decision-options");
+    options.replaceChildren();
+    for (const [index, option] of (request.options || []).entries()) {
+      const row = el("article", "option-row");
+      const copy = document.createElement("div");
+      copy.append(el("p", "option-label", option.label), el("p", "option-meta", `${option.consequence} 风险：${option.risk || "未声明"}`));
+      const button = el("button", `decision-button${index === 0 ? " primary" : ""}`, "选择此项");
+      button.type = "button";
+      button.setAttribute("aria-label", `选择：${option.label}`);
+      button.addEventListener("click", () => {
+        const ok = send("hpi.decision.choose", {
+          requestId: request.requestId,
+          requestDigest: request.requestDigest,
+          sourceDigest: request.sourceDigest,
+          optionId: option.optionId
+        });
+        if (ok) $("#decision-feedback").textContent = `已提交候选：${option.label}。尚未写入 canonical，等待 HPI Gate 接收。`;
+      });
+      row.append(copy, button);
+      options.append(row);
+    }
+    $("#request-changes").addEventListener("click", () => {
+      const statement = $("#change-statement").value.trim();
+      if (!statement) { $("#decision-feedback").textContent = "请先写明这一项决定需要怎样调整。"; return; }
+      const ok = send("hpi.decision.request_changes", {
+        requestId: request.requestId,
+        requestDigest: request.requestDigest,
+        sourceDigest: request.sourceDigest,
+        statement
+      });
+      if (ok) $("#decision-feedback").textContent = "修改要求已作为候选提交；项目状态尚未改变。";
+    });
+  };
+  const render = (data) => {
+    document.title = `${data.project.title} · ${data.status.machine}`;
+    $("#brand-meta").textContent = `${data.project.id} · ${data.project.phase} · ${data.meta.adapter} · ${data.meta.rendererVersion}`;
+    $("#hero-title").textContent = data.l0.current;
+    $("#intent").textContent = data.l0.intent;
+    $("#machine-explain").textContent = status("#machine-status", data.status.machine, machineMeta);
+    $("#human-explain").textContent = status("#human-status", data.status.human, humanMeta);
+    $("#latest-change").textContent = data.l0.latestChange;
+    $("#next-decision").textContent = data.l0.nextDecision;
+    $("#why-now").textContent = data.l1.whyNow;
+    $("#design-point").textContent = data.l1.design;
+    renderPain(data.l1.pain);
+    list("#not-verified-list", data.l1.notVerified, "没有未验证项");
+    list("#changed-list", data.l1.changed, "当前 source snapshot 没有新变化");
+    list("#verified-list", data.l1.verified, "当前没有工程已验证结果");
+    list("#remaining-list", data.l1.remaining, "当前没有声明剩余项");
+    list("#risk-list", data.l1.risks, "当前没有声明风险");
+    renderNodes(data.l2.nodes);
+    renderTrace("#trace-list", data.l2.links);
+    renderMachine(data);
+    renderSources(data);
+    renderDecision(data);
+    $("#authority-boundary").textContent = `${data.meta.authorityBoundary} · outbox ${data.meta.outbox.current || 0} current / ${data.meta.outbox.stale || 0} stale`;
+    $("#projection-id").textContent = `projection ${shortHash(data.meta.projectionId)}`;
+    $("#projection-id").title = data.meta.projectionId;
+    $("#brief-id").textContent = `brief ${shortHash(data.meta.briefId)}`;
+    $("#brief-id").title = data.meta.briefId;
+    $("#source-digest").textContent = `source ${shortHash(data.meta.sourceDigest)}`;
+    $("#source-digest").title = data.meta.sourceDigest;
+    $("#refresh").addEventListener("click", () => {
+      if (send("hpi.refresh", { sourceDigest: data.meta.sourceDigest, projectionId: data.meta.projectionId, briefId: data.meta.briefId })) {
+        $("#decision-feedback").textContent = "已请求只读刷新；这不会修改项目状态。";
+      }
+    });
+    const layerEvents = { "layer-l2": "hpi.view.l2", "layer-l3": "hpi.view.machine_result", "layer-l4": "hpi.view.evidence" };
+    for (const [id, eventType] of Object.entries(layerEvents)) {
+      const detail = document.getElementById(id);
+      detail.addEventListener("toggle", () => { if (detail.open) send(eventType, { projectionId: data.meta.projectionId }); });
+    }
+  };
+  try { render(parse()); }
+  catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    $("#hero-title").textContent = "HPI 投影被拒绝";
+    $("#intent").textContent = `${message}。页面保持只读且不会生成决策候选。`;
+    $("#decision-panel").dataset.hidden = "true";
+    document.body.dataset.hpiError = "true";
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:human-result:v1",
+  "title": "HPI Wire v1 HumanResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "human_result_id",
+    "request_id",
+    "decision_revision",
+    "source_ref",
+    "decision_kind",
+    "affected_revisions",
+    "actor",
+    "captured_at",
+    "explicitness"
+  ],
+  "properties": {
+    "schema": { "const": "hpi/wire/human-result/v1" },
+    "human_result_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "request_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "decision_revision": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" },
+    "source_ref": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" },
+    "decision_kind": { "$ref": "urn:hpi:wire:common:v1#/$defs/human_decision" },
+    "selected_option": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "statement": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "rationale": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "accepted_conditions": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "affected_revisions": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" }
+    },
+    "invalidated_assumptions": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "supersedes": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" },
+    "actor": { "$ref": "#/$defs/actor" },
+    "captured_at": { "type": "string", "format": "date-time" },
+    "explicitness": { "const": "explicit" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["decision_kind"],
+        "properties": {
+          "decision_kind": {
+            "enum": ["ACCEPT_OPTION", "ACCEPT_WITH_CONDITIONS"]
+          }
+        }
+      },
+      "then": {
+        "required": ["selected_option"],
+        "properties": {
+          "selected_option": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["decision_kind"],
+        "properties": { "decision_kind": { "const": "ACCEPT_WITH_CONDITIONS" } }
+      },
+      "then": {
+        "required": ["accepted_conditions"],
+        "properties": {
+          "accepted_conditions": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["decision_kind"],
+        "properties": { "decision_kind": { "const": "REQUEST_CHANGES" } }
+      },
+      "then": {
+        "required": ["statement"],
+        "properties": {
+          "statement": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "const": "human" },
+        "id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+      }
+    }
+  }
+}

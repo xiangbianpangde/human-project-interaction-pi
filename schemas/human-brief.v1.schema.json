@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:human-brief:v1",
+  "title": "HPI Wire v1 HumanBrief",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "brief_id",
+    "project_id",
+    "subject_ref",
+    "hps_projection_id",
+    "headline",
+    "why_now",
+    "pain_refs",
+    "design_point",
+    "changed",
+    "machine_verified",
+    "not_verified",
+    "remaining",
+    "next_and_reason",
+    "human_decision",
+    "risk_and_consequence",
+    "drill_down"
+  ],
+  "properties": {
+    "schema": { "const": "hpi/wire/human-brief/v1" },
+    "brief_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "project_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "subject_ref": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" },
+    "hps_projection_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" },
+    "headline": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "why_now": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "pain_refs": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "design_point": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "changed": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "machine_verified": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "not_verified": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "remaining": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "next_and_reason": { "$ref": "#/$defs/next_and_reason" },
+    "human_decision": { "$ref": "#/$defs/human_decision" },
+    "risk_and_consequence": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "drill_down": { "$ref": "#/$defs/drill_down" }
+  },
+  "$defs": {
+    "next_and_reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statement", "reason"],
+      "properties": {
+        "statement": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+        "reason": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+      }
+    },
+    "human_decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "request_ref": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["required"],
+            "properties": { "required": { "const": true } }
+          },
+          "then": {
+            "required": ["request_ref"],
+            "properties": {
+              "request_ref": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+            }
+          },
+          "else": {
+            "not": {
+              "required": ["request_ref"],
+              "properties": { "request_ref": {} }
+            }
+          }
+        }
+      ]
+    },
+    "drill_down": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trace_refs", "evidence_refs", "source_refs"],
+      "properties": {
+        "trace_refs": {
+          "type": "array",
+          "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" }
+        },
+        "source_refs": {
+          "type": "array",
+          "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" }
+        }
+      }
+    }
+  }
+}

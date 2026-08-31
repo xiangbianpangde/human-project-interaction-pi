@@ -1,0 +1,22 @@
+{
+  "id": "hpi-project",
+  "name": "HPI 项目重入与决策",
+  "description": "多 Agent / 长程项目的人类语义视图：L0–L4 渐进披露、机器/人类双轴状态、一题一答；决策按钮只回传候选事件，不写 canonical。content = hpi/talk/v1 JSON。",
+  "kind": "html-js",
+  "entry": "index.html",
+  "capabilities": [
+    "html",
+    "js",
+    "project-state",
+    "human-brief",
+    "progressive-disclosure",
+    "decision-gate",
+    "provenance",
+    "events"
+  ],
+  "dependencies": [
+    "components"
+  ],
+  "version": "0.2.0",
+  "useWhen": "重新进入多阶段项目、理解痛点→设计→任务→证据、区分机器事实与人类判断，或处理一个明确的设计/范围/风险决定"
+}

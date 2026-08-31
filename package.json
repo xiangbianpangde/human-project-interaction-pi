@@ -1,0 +1,25 @@
+{
+  "name": "human-project-interaction-pi",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only Human Project State, frozen interaction/execution wire schemas, pure retry/stale previews, deterministic escalation gate, session candidate outbox, and /talk project interaction surface for Pi.",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:wire": "node --test tests/wire-contract.test.mjs",
+    "test:execution-wire": "node --test tests/execution-wire.test.mjs",
+    "test:ricl": "node --test tests/integration/ricl-real.mjs",
+    "validate:skill": "node scripts/validate-skill.mjs",
+    "verify": "npm run test && npm run validate:skill",
+    "link:install": "node scripts/link-install.mjs install",
+    "link:status": "node scripts/link-install.mjs status",
+    "link:uninstall": "node scripts/link-install.mjs uninstall"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  }
+}

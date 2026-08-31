@@ -1,0 +1,159 @@
+# HPI Interaction Contract
+
+## Supported read-only Adapters
+
+| Adapter | Authority inputs | Conservative boundary |
+|---|---|---|
+| `ts001-pilot/0.1.0` | PRD, technical design, TS-001 contract | Contract remains `NOT-RUN`; self-reports cannot promote it |
+| `ricl-v4-readonly/0.1.0` | unique current pointer, authority/worklog contracts, live HEAD/LOG | Source PASS/完成/学生接受 prose is not MachineResult or HumanResult; typed bundles are still missing |
+
+Adapter selection must produce exactly one match. Zero or multiple matches fail closed. Every normalized source digest equals the digest of the Adapter id plus its canonical source snapshot.
+
+## External wire contracts
+
+Two immutable JSON Schema 2020-12 sets use snake_case-only external keys:
+
+1. `hpi/wire/v1` covers HPS, MachineResult, HumanResult, HumanBrief, EscalationRequest, and TraceLink.
+2. `hpi/wire/execution/v1` covers TaskSlice, HandoffBundle, Attempt, Evidence, ResultBundle, and StaleReport; its manifest depends on the exact `hpi/wire/v1` set digest.
+
+The camelCase objects inside the Pi runtime are an internal profile; only `src/wire.mjs` / `src/execution.mjs` codecs may export them. Each manifest pins every schema SHA and complete set digest. Missing files, byte drift, dependency drift, mixed casing, or a digest mismatch fail closed before projection/query.
+
+Inbound runtime remains `not_implemented`. Execution helpers only check immutable content revisions and return Result replay/conflict classifications, retry candidates, or `PREVIEW_ONLY` stale reports. Schema validity never authorizes Bundle intake, Agent dispatch, Result commit, automatic canonical invalidation, HumanResult intake, or canonical writes.
+
+## Public commands
+
+| Command | Behavior |
+|---|---|
+| `/hpi` | Route to this skill and open the current L0/L1 view in `/talk` |
+| `/hpi status` | Show the dual-axis projection status without rendering a browser view |
+| `/hpi brief [id]` | Build and render the deterministic Human Brief |
+| `/hpi trace <id>` | Read matching TraceLinks |
+| `/hpi wire [id]` | Export schema-bound snake_case objects without starting an Agent turn |
+| `/hpi decisions` | Read current requests and the session candidate outbox |
+| `/hpi verify` | Rebuild the projection and verify both pinned schema sets plus their dependency; does not run TS-001 |
+
+## `hpi_query`
+
+All operations are read-only.
+
+```json
+{
+  "op": "status | brief | trace | evidence | decisions | wire",
+  "objectId": "optional logical id"
+}
+```
+
+`brief` returns:
+
+- `brief`: deterministic `hpi/human-brief/v1` object;
+- `talkStyleId`: always `hpi-project` for this renderer;
+- `talkContent`: parsed `hpi/talk/v1` object;
+- `talkContentJson`: exact JSON string for `talk_render`;
+- `wireContract`: interaction schema-set id, naming rule, and pinned digest;
+- `executionWireContract`: execution schema-set id, naming rule, and pinned digest.
+
+Do not regenerate `talkContentJson` from prose.
+
+Identity boundaries are explicit: `sourceDigest` identifies the Adapter plus canonical source snapshot, `meta.projectionId` identifies HPS, and `meta.briefId` identifies the content-addressed Human Brief. A presentation-only brief change may keep the same source/HPS ids while changing `briefId`.
+
+`wire` returns current interaction objects plus `execution_contract`. `available_project_objects: 0` is an explicit absence result: do not infer TaskSlice/Handoff/Result/Evidence from source prose. ResultBundle uses `CANDIDATE_ONLY_NOT_PROJECT_CANONICAL`; StaleReport uses `PREVIEW_ONLY` and `project_canonical_changed: false`; retry must create a new attempt id and preserve the previous terminal revision.
+
+## `hpi_propose`
+
+```json
+{
+  "op": "escalation | pain | change | ingest_talk_event",
+  "payloadJson": "JSON object for escalation/talk events",
+  "statement": "required for pain/change",
+  "objectId": "optional affected id"
+}
+```
+
+Possible terminal shapes:
+
+| Kind | Meaning | State effect |
+|---|---|---|
+| `NOT_RUN` | The request tries to turn an unrun machine fact into a human belief question | none |
+| `EVIDENCE_GAP` | Required machine evidence is missing | none |
+| `MACHINE_FACT_REJECTED` | The question belongs to deterministic verification | none |
+| `HUMAN_DECISION_REQUIRED` | One valid semantic decision passed the Gate | may create an escalation candidate |
+| `READ_ONLY` | A `/talk` navigation or refresh event | none |
+| `STALE` | Request/source digest no longer matches | none; rebuild |
+| `CANDIDATE_CREATED` | A candidate was written to Pi session outbox | session only |
+
+There is intentionally no `hpi_accept`, `hpi_commit`, `hpi_write_state`, or `hpi_record_human_result` tool.
+
+## `/talk` events
+
+Read-only:
+
+- `hpi.view.l2`
+- `hpi.view.machine_result`
+- `hpi.view.evidence`
+- `hpi.refresh`
+
+Candidate-producing:
+
+- `hpi.decision.choose`
+- `hpi.decision.reject`
+- `hpi.decision.request_changes`
+
+A decision event must bind all of:
+
+```json
+{
+  "requestId": "...",
+  "requestDigest": "sha256",
+  "sourceDigest": "sha256",
+  "optionId": "required for choose"
+}
+```
+
+Never reconstruct these fields from visible labels.
+
+## State meanings
+
+### Machine axis
+
+- `NOT-RUN`: no qualifying run evidence exists.
+- `RUNNING`: machine work is active.
+- `PASS-ENGINEERING`: engineering contract passed within its declared scope.
+- `INCOMPLETE`: run/evidence is insufficient.
+- `DEVIATIONS_FOUND`: observed result differs from contract.
+- `OUT_OF_SCOPE`: intentionally not covered by this slice.
+- `BLOCKED`: a required gate or source is unavailable.
+
+### Human axis
+
+- `NOT_NEEDED`
+- `HUMAN_PENDING`
+- `HUMAN_ACCEPTED`
+- `HUMAN_ACCEPTED_WITH_CONDITIONS`
+- `HUMAN_REJECTED`
+- `CHANGES_REQUESTED`
+
+No value on one axis implies a value on the other.
+
+## Session outbox boundary
+
+The extension appends custom entries with:
+
+- custom type `hpi-candidate-outbox`;
+- schema `hpi/session-outbox/v1`;
+- authority `SESSION_ONLY_NOT_PROJECT_CANONICAL`;
+- transport status `PENDING_CANONICAL_WRITER`.
+
+The outbox preserves candidate receipts across resume. It does not participate in HPS projection and cannot establish HumanResult. Source digest drift marks previous candidates `STALE`.
+
+## R-ICL v4 invariant
+
+The Adapter reads only the declared current/worklog boundary. It must not invoke R-ICL generators, gates, tests, Git writes, or append commands; it must not use drafts, raw work products, or Wiki as current authority. Until typed Handoff/Result/Evidence records exist in the declared authority set and a validation-only intake is connected, the machine axis remains `INCOMPLETE` and no human decision is fabricated.
+
+## TS-001 pilot invariant
+
+The current authoritative contract says `test_status: NOT-RUN`. Therefore:
+
+- `117/117 tests passed`, `hash verified`, or equivalent Agent prose is at most `SELF_REPORTED`;
+- the Machine Result remains `NOT-RUN`;
+- the valid human question is whether to accept the baseline-first design route;
+- no HPI output may imply P0 MVP acceptance, canonical intake, scientific support, or clinical conclusion.

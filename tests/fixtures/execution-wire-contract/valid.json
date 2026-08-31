@@ -1,0 +1,450 @@
+{
+  "schema_set": "hpi/wire/execution/v1",
+  "fixture_authority": "SYNTHETIC_TEST_ONLY_NOT_PROJECT_CANONICAL",
+  "instances": {
+    "task_slice": {
+      "schema": "hpi/wire/task-slice/v1",
+      "task_id": "TS-FIXTURE-EXEC-001",
+      "project_id": "HPI-FIXTURE-PROJECT",
+      "title": "冻结 execution wire 合同",
+      "objective": "冻结 Bundle、Evidence、retry 与 stale preview。",
+      "pain_refs": [
+        {
+          "id": "P-FIXTURE-001",
+          "revision": "1",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "pointer": "fixtures/pain.md"
+        }
+      ],
+      "requirement_refs": [],
+      "design_refs": [],
+      "non_goals": [
+        "不写 project canonical。"
+      ],
+      "permission_scope": {
+        "allowed_paths": [
+          "schemas/execution-v1/**",
+          "src/execution.mjs",
+          "tests/**"
+        ],
+        "forbidden_paths": [
+          "canonical/**"
+        ],
+        "data_classes": [
+          "INTERNAL"
+        ],
+        "network": {
+          "mode": "DENY",
+          "allowed_hosts": []
+        }
+      },
+      "input_refs": [
+        {
+          "id": "SRC-FIXTURE-001",
+          "revision": "1",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pointer": "fixtures/source.md"
+        }
+      ],
+      "shared_contract_ref": {
+        "id": "CONTRACT-FIXTURE-001",
+        "revision": "1",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "pointer": "fixtures/contract.json"
+      },
+      "acceptance_ref": {
+        "id": "ACCEPT-FIXTURE-001",
+        "revision": "1",
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "pointer": "fixtures/acceptance.md"
+      },
+      "failure_semantics": "缺少引用、身份、权限或 evidence 时保持 INCOMPLETE。",
+      "rollback": "删除派生候选；不覆盖旧 revision。",
+      "assigned_roles": {
+        "implementation": {
+          "agent_id": "agent-impl",
+          "role": "IMPLEMENTATION",
+          "harness_revision": "harness/fixture"
+        },
+        "validation": {
+          "agent_id": "agent-validation",
+          "role": "VALIDATION",
+          "harness_revision": "harness/fixture"
+        }
+      },
+      "machine_status": "NOT-RUN",
+      "human_status": "NOT_NEEDED",
+      "status_source": {
+        "id": "STATUS-FIXTURE-001",
+        "revision": "1",
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "pointer": "fixtures/status.json"
+      },
+      "supersedes": {
+        "id": "TS-FIXTURE-EXEC-001",
+        "revision": "b435df3c6ce8d8ee5f860c588d0694f1187f06bedd63364a949e17799861d595",
+        "sha256": "b435df3c6ce8d8ee5f860c588d0694f1187f06bedd63364a949e17799861d595",
+        "pointer": "fixtures/task-old.json"
+      },
+      "changed_fields": [
+        "objective"
+      ],
+      "provenance_refs": [
+        {
+          "id": "PROV-FIXTURE-001",
+          "revision": "1",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "pointer": "fixtures/provenance.json"
+        }
+      ],
+      "created_at": "2026-08-30T01:00:00.000Z",
+      "task_revision": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c"
+    },
+    "handoff_bundle": {
+      "schema": "hpi/wire/handoff-bundle/v1",
+      "handoff_id": "HO-FIXTURE-001",
+      "task_ref": {
+        "id": "TS-FIXTURE-EXEC-001",
+        "revision": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "sha256": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "pointer": "fixtures/task.json"
+      },
+      "sender": {
+        "agent_id": "agent-coordinator",
+        "role": "COORDINATOR",
+        "harness_revision": "harness/fixture"
+      },
+      "receiver": {
+        "agent_id": "agent-impl",
+        "role": "IMPLEMENTATION",
+        "harness_revision": "harness/fixture"
+      },
+      "input_revisions": [
+        {
+          "id": "SRC-FIXTURE-001",
+          "revision": "1",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pointer": "fixtures/source.md"
+        },
+        {
+          "id": "TS-FIXTURE-EXEC-001",
+          "revision": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+          "sha256": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+          "pointer": "fixtures/task.json"
+        }
+      ],
+      "objective": "冻结 Bundle、Evidence、retry 与 stale preview。",
+      "non_goals": [
+        "不执行真实项目测试。"
+      ],
+      "permission_scope": {
+        "allowed_paths": [
+          "schemas/execution-v1/**",
+          "src/execution.mjs",
+          "tests/**"
+        ],
+        "forbidden_paths": [
+          "canonical/**"
+        ],
+        "data_classes": [
+          "INTERNAL"
+        ],
+        "network": {
+          "mode": "DENY",
+          "allowed_hosts": []
+        }
+      },
+      "expected_output": "Schema、fixture 和纯 lifecycle 结果。",
+      "acceptance_ref": {
+        "id": "ACCEPT-FIXTURE-001",
+        "revision": "1",
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "pointer": "fixtures/acceptance.md"
+      },
+      "failure_semantics": "任何缺字段或 drift 均 fail closed。",
+      "context_summary": {
+        "text": "该摘要仅用于定向，结构化字段优先。",
+        "authoritative": false,
+        "purpose": "ORIENTATION_ONLY"
+      },
+      "safe_default": "NO_STATE_CHANGE",
+      "idempotency_key": "9410d8a26b98c785a9e7493a2f52c5f82c606f50b7f19ebf6c67eb27c50b6198",
+      "changed_fields": [],
+      "provenance_refs": [
+        {
+          "id": "PROV-FIXTURE-001",
+          "revision": "1",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "pointer": "fixtures/provenance.json"
+        }
+      ],
+      "created_at": "2026-08-30T01:10:00.000Z",
+      "handoff_revision": "b14ed4860d98de468b00b454db557d515555e92df0174cb5a76cc17bb558e7b2"
+    },
+    "attempt": {
+      "schema": "hpi/wire/attempt/v1",
+      "attempt_id": "ATTEMPT-FIXTURE-001",
+      "task_ref": {
+        "id": "TS-FIXTURE-EXEC-001",
+        "revision": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "sha256": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "pointer": "fixtures/task.json"
+      },
+      "handoff_ref": {
+        "id": "HO-FIXTURE-001",
+        "revision": "b14ed4860d98de468b00b454db557d515555e92df0174cb5a76cc17bb558e7b2",
+        "sha256": "b14ed4860d98de468b00b454db557d515555e92df0174cb5a76cc17bb558e7b2",
+        "pointer": "fixtures/handoff.json"
+      },
+      "ordinal": 1,
+      "status": "FAILED",
+      "workspace_ref": {
+        "id": "WORKSPACE-FIXTURE-001",
+        "revision": "1",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "pointer": "workspaces/attempt-001"
+      },
+      "started_at": "2026-08-30T01:11:00.000Z",
+      "ended_at": "2026-08-30T01:12:00.000Z",
+      "failure": {
+        "kind": "EVIDENCE",
+        "summary": "缺少真实运行证据。",
+        "retryable": true
+      },
+      "changed_fields": [],
+      "provenance_refs": [
+        {
+          "id": "PROV-FIXTURE-001",
+          "revision": "1",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "pointer": "fixtures/provenance.json"
+        }
+      ],
+      "created_at": "2026-08-30T01:10:30.000Z",
+      "attempt_revision": "092efa47f3ba40f69b29b10095385f64e18d76f1510df750d697ae96285c0082"
+    },
+    "evidence": {
+      "schema": "hpi/wire/evidence/v1",
+      "evidence_id": "EV-FIXTURE-001",
+      "task_ref": {
+        "id": "TS-FIXTURE-EXEC-001",
+        "revision": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "sha256": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "pointer": "fixtures/task.json"
+      },
+      "attempt_id": "ATTEMPT-FIXTURE-001",
+      "kind": "REFERENCE",
+      "pointer": "fixtures/source.md",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "PRE_HARNESS_CHECKED",
+      "claim_refs": [
+        "FACT-FIXTURE-INCOMPLETE"
+      ],
+      "collected_by": {
+        "agent_id": "agent-impl",
+        "role": "IMPLEMENTATION",
+        "harness_revision": "harness/fixture"
+      },
+      "verified_by": [],
+      "limitations": [
+        "仅为 synthetic fixture。"
+      ],
+      "sensitivity": "INTERNAL",
+      "changed_fields": [],
+      "provenance_refs": [
+        {
+          "id": "PROV-FIXTURE-001",
+          "revision": "1",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "pointer": "fixtures/provenance.json"
+        }
+      ],
+      "created_at": "2026-08-30T01:12:00.000Z",
+      "evidence_revision": "de4a68e4f0fbaad2c76b38ca0c3946ce2bc6cccd06af44e9d887ee125cbfee31"
+    },
+    "result_bundle": {
+      "schema": "hpi/wire/result-bundle/v1",
+      "result_bundle_id": "RB-FIXTURE-001",
+      "task_ref": {
+        "id": "TS-FIXTURE-EXEC-001",
+        "revision": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "sha256": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "pointer": "fixtures/task.json"
+      },
+      "handoff_ref": {
+        "id": "HO-FIXTURE-001",
+        "revision": "b14ed4860d98de468b00b454db557d515555e92df0174cb5a76cc17bb558e7b2",
+        "sha256": "b14ed4860d98de468b00b454db557d515555e92df0174cb5a76cc17bb558e7b2",
+        "pointer": "fixtures/handoff.json"
+      },
+      "attempt_ref": {
+        "id": "ATTEMPT-FIXTURE-001",
+        "revision": "092efa47f3ba40f69b29b10095385f64e18d76f1510df750d697ae96285c0082",
+        "sha256": "092efa47f3ba40f69b29b10095385f64e18d76f1510df750d697ae96285c0082"
+      },
+      "generated_by": {
+        "agent_id": "agent-impl",
+        "role": "IMPLEMENTATION",
+        "harness_revision": "harness/fixture"
+      },
+      "machine_result": {
+        "schema": "hpi/wire/machine-result/v1",
+        "result_id": "MR-FIXTURE-EXEC-001",
+        "task_id": "TS-FIXTURE-EXEC-001",
+        "attempt_id": "ATTEMPT-FIXTURE-001",
+        "result_revision": "ba000cd3474f531e706a63576c0064f6a29675e0a6f0eedc0d72c3d0129ae722",
+        "source_ref": {
+          "id": "TS-FIXTURE-EXEC-001",
+          "revision": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+          "sha256": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+          "pointer": "fixtures/task.json"
+        },
+        "verdict": "INCOMPLETE",
+        "facts": [
+          {
+            "fact_id": "FACT-FIXTURE-INCOMPLETE",
+            "kind": "REFERENCE",
+            "statement": "只存在 synthetic fixture，未执行真实 Harness。",
+            "status": "INCOMPLETE",
+            "evidence_refs": [
+              {
+                "id": "EV-FIXTURE-001",
+                "revision": "de4a68e4f0fbaad2c76b38ca0c3946ce2bc6cccd06af44e9d887ee125cbfee31",
+                "sha256": "de4a68e4f0fbaad2c76b38ca0c3946ce2bc6cccd06af44e9d887ee125cbfee31",
+                "pointer": "fixtures/evidence.json"
+              }
+            ]
+          }
+        ],
+        "limitations": [
+          "不是运行证据。"
+        ],
+        "unresolved": [
+          "需要真实 Implementation/Validation runtime。"
+        ]
+      },
+      "evidence": [
+        {
+          "schema": "hpi/wire/evidence/v1",
+          "evidence_id": "EV-FIXTURE-001",
+          "task_ref": {
+            "id": "TS-FIXTURE-EXEC-001",
+            "revision": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+            "sha256": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+            "pointer": "fixtures/task.json"
+          },
+          "attempt_id": "ATTEMPT-FIXTURE-001",
+          "kind": "REFERENCE",
+          "pointer": "fixtures/source.md",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "PRE_HARNESS_CHECKED",
+          "claim_refs": [
+            "FACT-FIXTURE-INCOMPLETE"
+          ],
+          "collected_by": {
+            "agent_id": "agent-impl",
+            "role": "IMPLEMENTATION",
+            "harness_revision": "harness/fixture"
+          },
+          "verified_by": [],
+          "limitations": [
+            "仅为 synthetic fixture。"
+          ],
+          "sensitivity": "INTERNAL",
+          "changed_fields": [],
+          "provenance_refs": [
+            {
+              "id": "PROV-FIXTURE-001",
+              "revision": "1",
+              "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+              "pointer": "fixtures/provenance.json"
+            }
+          ],
+          "created_at": "2026-08-30T01:12:00.000Z",
+          "evidence_revision": "de4a68e4f0fbaad2c76b38ca0c3946ce2bc6cccd06af44e9d887ee125cbfee31"
+        }
+      ],
+      "output_refs": [],
+      "failure": {
+        "kind": "EVIDENCE",
+        "summary": "缺少真实运行证据。",
+        "retryable": true
+      },
+      "unresolved": [
+        "runtime intake 未实现。"
+      ],
+      "next_attempt": {
+        "recommended": true,
+        "reason": "真实 runtime 可用后新建 attempt。"
+      },
+      "idempotency_key": "1885b9ff94216e4cb605a554279301cdf804fc729fac30f73bfda2901758781b",
+      "submitted_at": "2026-08-30T01:13:00.000Z",
+      "submission_authority": "CANDIDATE_ONLY_NOT_PROJECT_CANONICAL",
+      "changed_fields": [],
+      "provenance_refs": [
+        {
+          "id": "PROV-FIXTURE-001",
+          "revision": "1",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "pointer": "fixtures/provenance.json"
+        }
+      ],
+      "bundle_revision": "c532005e5ba0b21f9e65615ccdd0a432edb4c12e47a07b65c2f5d65b006a710b"
+    },
+    "stale_report": {
+      "schema": "hpi/wire/stale-report/v1",
+      "stale_report_id": "STALE-0386b5021ef09a3d5062df747fcf9d3c98aa4c56afe64d093f1e38106f09d11f",
+      "upstream_before": {
+        "id": "TS-FIXTURE-EXEC-001",
+        "revision": "b435df3c6ce8d8ee5f860c588d0694f1187f06bedd63364a949e17799861d595",
+        "sha256": "b435df3c6ce8d8ee5f860c588d0694f1187f06bedd63364a949e17799861d595",
+        "pointer": "fixtures/task-old.json"
+      },
+      "upstream_after": {
+        "id": "TS-FIXTURE-EXEC-001",
+        "revision": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "sha256": "23d011547f9d44b77fb830f44f577cde315c5aff55a35d53df90a21cb744176c",
+        "pointer": "fixtures/task.json"
+      },
+      "effects": [
+        {
+          "target_ref": {
+            "id": "HO-FIXTURE-001",
+            "revision": "b14ed4860d98de468b00b454db557d515555e92df0174cb5a76cc17bb558e7b2",
+            "sha256": "b14ed4860d98de468b00b454db557d515555e92df0174cb5a76cc17bb558e7b2",
+            "pointer": "fixtures/handoff.json"
+          },
+          "relation": "uses",
+          "disposition": "STALE",
+          "reason": "Handoff 绑定了旧 TaskSlice revision。",
+          "automatic_invalidation": false
+        },
+        {
+          "target_ref": {
+            "id": "RB-FIXTURE-001",
+            "revision": "c532005e5ba0b21f9e65615ccdd0a432edb4c12e47a07b65c2f5d65b006a710b",
+            "sha256": "c532005e5ba0b21f9e65615ccdd0a432edb4c12e47a07b65c2f5d65b006a710b",
+            "pointer": "fixtures/result.json"
+          },
+          "relation": "implements",
+          "disposition": "NEEDS_REVIEW",
+          "reason": "结果语义需对新目标复核。",
+          "automatic_invalidation": false
+        }
+      ],
+      "detected_at": "2026-08-30T01:14:00.000Z",
+      "reconciler_mode": "PREVIEW_ONLY",
+      "report_authority": "DERIVED_PREVIEW_NOT_PROJECT_CANONICAL",
+      "project_canonical_changed": false,
+      "provenance_refs": [
+        {
+          "id": "PROV-FIXTURE-001",
+          "revision": "1",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "pointer": "fixtures/provenance.json"
+        }
+      ],
+      "report_revision": "572d100759e034d96286d46ffe2ff4cbbe186536b7072375fed849f1fa83ecb9"
+    }
+  }
+}

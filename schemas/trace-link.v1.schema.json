@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:trace-link:v1",
+  "title": "HPI Wire v1 TraceLink",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "link_id", "from_ref", "to_ref", "relation", "source_ref"],
+  "properties": {
+    "schema": { "const": "hpi/wire/trace-link/v1" },
+    "link_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "from_ref": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" },
+    "to_ref": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" },
+    "relation": { "$ref": "urn:hpi:wire:common:v1#/$defs/trace_relation" },
+    "source_ref": { "$ref": "urn:hpi:wire:common:v1#/$defs/source_ref" }
+  }
+}

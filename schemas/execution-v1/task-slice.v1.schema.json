@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:task-slice:v1",
+  "title": "HPI Execution Wire v1 TaskSlice",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "task_id",
+    "task_revision",
+    "project_id",
+    "title",
+    "objective",
+    "pain_refs",
+    "requirement_refs",
+    "design_refs",
+    "non_goals",
+    "permission_scope",
+    "input_refs",
+    "shared_contract_ref",
+    "acceptance_ref",
+    "failure_semantics",
+    "rollback",
+    "assigned_roles",
+    "machine_status",
+    "human_status",
+    "status_source",
+    "changed_fields",
+    "provenance_refs",
+    "created_at"
+  ],
+  "properties": {
+    "schema": { "const": "hpi/wire/task-slice/v1" },
+    "task_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "task_revision": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" },
+    "project_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "title": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "objective": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "pain_refs": { "$ref": "#/$defs/ref_array" },
+    "requirement_refs": { "$ref": "#/$defs/ref_array" },
+    "design_refs": { "$ref": "#/$defs/ref_array" },
+    "non_goals": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "permission_scope": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/permission_scope" },
+    "input_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" }
+    },
+    "shared_contract_ref": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "acceptance_ref": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "failure_semantics": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "rollback": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "assigned_roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation", "validation"],
+      "properties": {
+        "implementation": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/agent" },
+        "validation": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/agent" }
+      }
+    },
+    "machine_status": { "$ref": "urn:hpi:wire:common:v1#/$defs/machine_verdict" },
+    "human_status": { "$ref": "urn:hpi:wire:common:v1#/$defs/human_status" },
+    "status_source": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "supersedes": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "changed_fields": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/changed_fields" },
+    "provenance_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" }
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "anyOf": [
+        { "properties": { "pain_refs": { "type": "array", "minItems": 1 } } },
+        { "properties": { "requirement_refs": { "type": "array", "minItems": 1 } } },
+        { "properties": { "design_refs": { "type": "array", "minItems": 1 } } }
+      ]
+    },
+    {
+      "if": { "properties": { "supersedes": {} }, "required": ["supersedes"] },
+      "then": { "properties": { "changed_fields": { "type": "array", "minItems": 1 } } }
+    }
+  ],
+  "$defs": {
+    "ref_array": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" }
+    }
+  }
+}

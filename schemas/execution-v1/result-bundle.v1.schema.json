@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:result-bundle:v1",
+  "title": "HPI Execution Wire v1 ResultBundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "result_bundle_id",
+    "bundle_revision",
+    "task_ref",
+    "handoff_ref",
+    "attempt_ref",
+    "idempotency_key",
+    "generated_by",
+    "submitted_at",
+    "machine_result",
+    "evidence",
+    "output_refs",
+    "failure",
+    "unresolved",
+    "next_attempt",
+    "submission_authority",
+    "changed_fields",
+    "provenance_refs"
+  ],
+  "properties": {
+    "schema": { "const": "hpi/wire/result-bundle/v1" },
+    "result_bundle_id": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" },
+    "bundle_revision": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" },
+    "task_ref": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "handoff_ref": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "attempt_ref": {
+      "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref",
+      "description": "Frozen submission-time Attempt snapshot. A later terminal Attempt revision may supersede it and reference this ResultBundle, avoiding cyclic content hashes."
+    },
+    "idempotency_key": { "$ref": "urn:hpi:wire:common:v1#/$defs/sha256" },
+    "generated_by": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/agent" },
+    "submitted_at": { "type": "string", "format": "date-time" },
+    "machine_result": { "$ref": "urn:hpi:wire:machine-result:v1" },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:evidence:v1" }
+    },
+    "output_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" }
+    },
+    "failure": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/failure" },
+    "unresolved": {
+      "type": "array",
+      "items": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+    },
+    "next_attempt": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["recommended", "reason"],
+          "properties": {
+            "recommended": { "type": "boolean" },
+            "reason": { "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string" }
+          }
+        }
+      ]
+    },
+    "submission_authority": { "const": "CANDIDATE_ONLY_NOT_PROJECT_CANONICAL" },
+    "supersedes": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" },
+    "changed_fields": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/changed_fields" },
+    "provenance_refs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "urn:hpi:wire:execution-common:v1#/$defs/frozen_ref" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "machine_result": {
+            "type": "object",
+            "properties": { "verdict": { "type": "string", "const": "PASS-ENGINEERING" } },
+            "required": ["verdict"]
+          }
+        },
+        "required": ["machine_result"]
+      },
+      "then": {
+        "properties": {
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "contains": {
+              "type": "object",
+              "required": ["status"],
+              "properties": {
+                "status": { "type": "string", "enum": ["HARNESS_VERIFIED", "INDEPENDENTLY_VALIDATED"] }
+              }
+            },
+            "minContains": 1
+          },
+          "failure": {
+            "type": "object",
+            "properties": {
+              "kind": { "type": "string", "const": "NONE" },
+              "retryable": { "type": "boolean", "const": false }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "supersedes": {} }, "required": ["supersedes"] },
+      "then": { "properties": { "changed_fields": { "type": "array", "minItems": 1 } } }
+    }
+  ]
+}
