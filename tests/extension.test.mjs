@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { loadPiExtensions } from "./support/pi-runtime.mjs";
+import { buildValidationAttemptFixture } from "./support/validation-runtime-fixture.mjs";
 
 const rootPath = fileURLToPath(new URL("..", import.meta.url));
 const extensionPath = resolve(rootPath, "extension/hpi/index.ts");
@@ -52,7 +55,7 @@ describe("Pi extension registration", () => {
   it("loads with the installed Pi loader and registers the bounded API", async () => {
     const { extension } = await loadHpi();
     assert.deepEqual([...extension.commands.keys()], ["hpi"]);
-    assert.deepEqual([...extension.tools.keys()].sort(), ["hpi_propose", "hpi_query"]);
+    assert.deepEqual([...extension.tools.keys()].sort(), ["hpi_propose", "hpi_query", "hpi_validation"]);
     for (const hook of [
       "session_start",
       "session_shutdown",
@@ -65,6 +68,7 @@ describe("Pi extension registration", () => {
     assert.equal(extension.tools.has("hpi_accept"), false);
     assert.equal(extension.tools.has("hpi_commit"), false);
     assert.equal(extension.tools.has("hpi_write_state"), false);
+    assert.equal(extension.tools.has("hpi_run_formal_ts001"), false);
   });
 });
 
@@ -120,6 +124,11 @@ describe("Pi lifecycle and query", () => {
     assert.equal(data.execution_contract.canonical_writer, "NOT_IMPLEMENTED");
     assert.equal(data.execution_contract.available_project_objects, 0);
     assert.equal(data.execution_contract.lifecycle_mode, "SCHEMA_AND_PURE_PREVIEW_ONLY");
+    assert.equal(data.validation_runtime_contract.schema_set, "hpi/wire/validation-runtime/v1");
+    assert.match(data.validation_runtime_contract.schema_set_digest, /^[a-f0-9]{64}$/u);
+    assert.equal(data.validation_runtime_contract.inbound_runtime, "validation_attempt_input_only");
+    assert.equal(data.validation_runtime_contract.project_canonical_write, "FORBIDDEN");
+    assert.equal(data.validation_runtime_contract.formal_ts001_status, "NOT-RUN");
     assertSnakeCaseKeys(data);
     assert.equal(entries.length, 0);
   });
@@ -133,6 +142,59 @@ describe("Pi lifecycle and query", () => {
     );
     assert.equal(result.block, true);
     assert.match(result.reason, /fail-closed/);
+  });
+});
+
+describe("Pi validation-runtime tool", () => {
+  it("previews and runs only the explicit machine-only attempt without session or canonical authority", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hpi-extension-validation-"));
+    try {
+      const fixture = buildValidationAttemptFixture(root, { attemptId: "VRS1-EXTENSION-001" });
+      const { extension } = await loadHpi();
+      const { ctx, entries } = mockContext(root);
+      const tool = extension.tools.get("hpi_validation").definition;
+
+      const preview = await tool.execute(
+        "validation-preview",
+        { op: "preview", manifestPath: fixture.manifestPointer },
+        undefined,
+        undefined,
+        ctx,
+      );
+      assert.equal(preview.details.data.preview.accepted, true);
+      assert.equal(preview.details.data.preview.wroteStore, false);
+      assert.equal(existsSync(join(root, fixture.wire.isolated_write_root)), false);
+
+      const run = await tool.execute(
+        "validation-run",
+        { op: "run", manifestPath: fixture.manifestPointer },
+        undefined,
+        undefined,
+        ctx,
+      );
+      const data = run.details.data;
+      assert.equal(data.runtime.kind, "MACHINE_RESULT_PRODUCED");
+      assert.equal(data.runtime.machineResult.verdict, "PASS-ENGINEERING");
+      assert.equal(data.runtime.authority.projectCanonicalWrite, "FORBIDDEN");
+      assert.equal(data.boundary.formalTs001Status, "NOT-RUN");
+      assert.equal(data.projection.hps.activeWork[0].humanStatus, "NOT_NEEDED");
+      assert.equal(data.projection.hps.activeWork[1].machineStatus, "NOT-RUN");
+      assert.match(data.talkContent.l0.current, /正式 TS-001 仍为 NOT-RUN/u);
+      assert.equal(entries.length, 0);
+
+      const status = await tool.execute(
+        "validation-status",
+        { op: "status", attemptId: fixture.wire.validation_attempt_id },
+        undefined,
+        undefined,
+        ctx,
+      );
+      assert.equal(status.details.data.status.history.kind, "TERMINAL");
+      assert.equal(status.details.data.status.history.locked, false);
+      assert.equal(entries.length, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
@@ -155,6 +217,8 @@ describe("/hpi command execution", () => {
     assert.match(notifications[0].message, /"executionWireSchemaSet": "hpi\/wire\/execution\/v2"/);
     assert.match(notifications[0].message, /"executionWireSchemaSetDigest": "[a-f0-9]{64}"/);
     assert.match(notifications[0].message, /"executionRuntimeIntake": "NOT_IMPLEMENTED"/);
+    assert.match(notifications[0].message, /"validationRuntimeIntake": "VALIDATION_ATTEMPT_INPUT_V1_ONLY"/);
+    assert.match(notifications[0].message, /"formalTs001Status": "NOT-RUN"/);
   });
 
   it("exports /hpi wire without starting an agent turn", async () => {
@@ -172,6 +236,8 @@ describe("/hpi command execution", () => {
     assert.match(notifications[0].message, /"inbound_runtime": "NOT_IMPLEMENTED"/);
     assert.match(notifications[0].message, /"schema_set": "hpi\/wire\/execution\/v2"/);
     assert.match(notifications[0].message, /"available_project_objects": 0/);
+    assert.match(notifications[0].message, /"schema_set": "hpi\/wire\/validation-runtime\/v1"/);
+    assert.match(notifications[0].message, /"formal_ts001_status": "NOT-RUN"/);
     assert.doesNotMatch(notifications[0].message, /"projectId"|"machineStatus"/);
   });
 
@@ -205,6 +271,8 @@ describe("/hpi command execution", () => {
     assert.match(notifications[0].message, /"wireSchemaSetDigest": "[a-f0-9]{64}"/);
     assert.match(notifications[0].message, /"executionWireSchemaSet": "hpi\/wire\/execution\/v2"/);
     assert.match(notifications[0].message, /"executionWireSchemaSetDigest": "[a-f0-9]{64}"/);
+    assert.match(notifications[0].message, /"validationWireSchemaSet": "hpi\/wire\/validation-runtime\/v1"/);
+    assert.match(notifications[0].message, /"validationWireSchemaSetDigest": "[a-f0-9]{64}"/);
     assert.match(notifications[0].message, /projection and frozen schema-lineage verification only; execution lifecycle is pure preview and the adapter does not run project tests or write canonical state/);
   });
 });

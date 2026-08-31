@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 - 2026-08-31
+
+- Expose the validation-runtime-v1 lineage and its machine-only authority boundary during project re-entry.
+- Distinguish local Validation Runtime Slice V1 PASS from formal TS-001, which remains NOT-RUN.
+- Document explicit-manifest preview/run/status, isolated ledger writes, exact replay, divergent conflict, new-ID retry, and fresh-process interrupted recovery.
+- Keep HumanResult, CandidateEvent intake, Agent dispatch, canonical writing, and independent formal validation out of scope.
+
 ## 0.5.0 - 2026-08-31
 
 - Require the preserved execution-v1 → current execution-v2 schema lineage during project re-entry.

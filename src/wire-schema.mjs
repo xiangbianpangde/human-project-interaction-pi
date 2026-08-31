@@ -11,10 +11,13 @@ export const EXECUTION_WIRE_SCHEMA_SET_V1 = "hpi/wire/execution/v1";
 export const EXECUTION_WIRE_SCHEMA_SET_DIGEST_V1 = "450698c6e3218b3419f081dc47576f94edaea36ee0da6a97b35c80ef6d9e88d1";
 export const EXECUTION_WIRE_SCHEMA_SET = "hpi/wire/execution/v2";
 export const EXECUTION_WIRE_SCHEMA_SET_DIGEST = "bccb373985dacfdff8eaa1c2f7001cb4644a1d4c931e5359ce4200f69836439c";
+export const VALIDATION_RUNTIME_WIRE_SCHEMA_SET = "hpi/wire/validation-runtime/v1";
+export const VALIDATION_RUNTIME_WIRE_SCHEMA_SET_DIGEST = "598e1ca92f6cedeb97e2e00a4c22703ca5359977c3bd9681a015231fa692d3fa";
 
 const INTERACTION_MANIFEST_NAME = "manifest.v1.json";
 const EXECUTION_V1_MANIFEST_NAME = "manifest.v1.json";
 const EXECUTION_MANIFEST_NAME = "manifest.v2.json";
+const VALIDATION_RUNTIME_MANIFEST_NAME = "manifest.v1.json";
 const DRAFT = "https://json-schema.org/draft/2020-12/schema";
 
 export class WireSchemaError extends Error {
@@ -67,6 +70,10 @@ function defaultExecutionSchemaRoot() {
   return fileURLToPath(new URL("../schemas/execution-v2/", import.meta.url));
 }
 
+function defaultValidationRuntimeSchemaRoot() {
+  return fileURLToPath(new URL("../schemas/validation-runtime-v1/", import.meta.url));
+}
+
 function validateDependencies(value, expected) {
   const dependencies = value === undefined ? [] : value;
   if (!Array.isArray(dependencies)) {
@@ -100,6 +107,7 @@ function loadSchemaSet({
   expectedSchemaSet,
   expectedDigest,
   expectedDependencies = [],
+  expectedInboundRuntime = "not_implemented",
 }) {
   const rootPath = realpathSync(resolve(root));
   const manifestPath = join(rootPath, manifestName);
@@ -138,8 +146,10 @@ function loadSchemaSet({
   if (manifest.compatibility.mixed_keys !== "rejected") {
     throw new WireSchemaError("manifest.compatibility.mixed_keys must equal rejected");
   }
-  if (manifest.compatibility.inbound_runtime !== "not_implemented") {
-    throw new WireSchemaError("manifest.compatibility.inbound_runtime must equal not_implemented");
+  if (manifest.compatibility.inbound_runtime !== expectedInboundRuntime) {
+    throw new WireSchemaError(
+      `manifest.compatibility.inbound_runtime must equal ${expectedInboundRuntime}`,
+    );
   }
   const dependencies = validateDependencies(manifest.dependencies, expectedDependencies);
   if (!Array.isArray(manifest.schemas) || manifest.schemas.length === 0) {
@@ -263,6 +273,35 @@ export function loadExecutionWireSchemaSet({
       {
         schema_set: executionV1.schemaSet,
         schema_set_digest: executionV1.schemaSetDigest,
+      },
+    ],
+  });
+}
+
+export function loadValidationRuntimeWireSchemaSet({
+  root = defaultValidationRuntimeSchemaRoot(),
+  executionRoot = defaultExecutionSchemaRoot(),
+  executionV1Root = defaultExecutionV1SchemaRoot(),
+} = {}) {
+  const interaction = loadWireSchemaSet();
+  const execution = loadExecutionWireSchemaSet({
+    root: executionRoot,
+    v1Root: executionV1Root,
+  });
+  return loadSchemaSet({
+    root,
+    manifestName: VALIDATION_RUNTIME_MANIFEST_NAME,
+    expectedSchemaSet: VALIDATION_RUNTIME_WIRE_SCHEMA_SET,
+    expectedDigest: VALIDATION_RUNTIME_WIRE_SCHEMA_SET_DIGEST,
+    expectedInboundRuntime: "validation_attempt_input_only",
+    expectedDependencies: [
+      {
+        schema_set: interaction.schemaSet,
+        schema_set_digest: interaction.schemaSetDigest,
+      },
+      {
+        schema_set: execution.schemaSet,
+        schema_set_digest: execution.schemaSetDigest,
       },
     ],
   });

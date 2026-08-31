@@ -12,6 +12,7 @@ import { describe, it } from "node:test";
 
 import {
   inspectAuthoritativeFiles,
+  readAuthoritativeFileBuffers,
   readAuthoritativeFiles,
 } from "../src/adapters/authoritative-files.mjs";
 
@@ -37,6 +38,9 @@ describe("bounded authoritative Adapter files", () => {
         root: "root\n",
         current: "current\n",
       });
+      const buffers = readAuthoritativeFileBuffers(root, files, { maxBytes: 1024 });
+      assert.equal(Buffer.isBuffer(buffers.root), true);
+      assert.equal(buffers.root.toString("hex"), Buffer.from("root\n").toString("hex"));
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

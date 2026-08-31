@@ -19,7 +19,14 @@ import {
 } from "../../src/session.mjs";
 import { buildTalkContent } from "../../src/talk-content.mjs";
 import {
+  buildValidationAttemptProjection,
+  getValidationAttemptStatus,
+  previewValidationAttempt,
+  runAndProjectValidationAttempt,
+} from "../../src/validation-runtime.mjs";
+import {
   loadExecutionWireSchemaSet,
+  loadValidationRuntimeWireSchemaSet,
   loadWireSchemaSet,
 } from "../../src/wire-schema.mjs";
 import {
@@ -32,7 +39,8 @@ import {
 
 const QUERY_OPS = ["status", "brief", "trace", "evidence", "decisions", "wire"] as const;
 const PROPOSE_OPS = ["escalation", "pain", "change", "ingest_talk_event"] as const;
-const HPI_TOOL_NAMES = new Set(["hpi_query", "hpi_propose"]);
+const VALIDATION_OPS = ["preview", "run", "status"] as const;
+const HPI_TOOL_NAMES = new Set(["hpi_query", "hpi_propose", "hpi_validation"]);
 const MAX_TOOL_TEXT_BYTES = 45_000;
 
 type RuntimeState = {
@@ -49,6 +57,12 @@ type RuntimeState = {
     schemaSetDigest: string;
   };
   executionWireSchema?: {
+    schemaSet: string;
+    naming: string;
+    schemaSetDigest: string;
+    dependencies: Array<{ schema_set: string; schema_set_digest: string }>;
+  };
+  validationWireSchema?: {
     schemaSet: string;
     naming: string;
     schemaSetDigest: string;
@@ -141,6 +155,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
       const previousDigest = state.projection?.sourceDigest;
       const loadedWireSchema = loadWireSchemaSet();
       const loadedExecutionWireSchema = loadExecutionWireSchemaSet();
+      const loadedValidationWireSchema = loadValidationRuntimeWireSchemaSet();
       const projection = rebuildProjectProjection(ctx.cwd);
       const restoredOutbox = restoreOutbox(ctx.sessionManager.getBranch(), projection.sourceDigest);
       state = {
@@ -160,6 +175,12 @@ export default function hpiExtension(pi: ExtensionAPI) {
           naming: loadedExecutionWireSchema.naming,
           schemaSetDigest: loadedExecutionWireSchema.schemaSetDigest,
           dependencies: loadedExecutionWireSchema.dependencies,
+        },
+        validationWireSchema: {
+          schemaSet: loadedValidationWireSchema.schemaSet,
+          naming: loadedValidationWireSchema.naming,
+          schemaSetDigest: loadedValidationWireSchema.schemaSetDigest,
+          dependencies: loadedValidationWireSchema.dependencies,
         },
       };
     } catch (error) {
@@ -193,6 +214,9 @@ export default function hpiExtension(pi: ExtensionAPI) {
         executionWireSchemaSet: state.executionWireSchema?.schemaSet,
         executionWireSchemaSetDigest: state.executionWireSchema?.schemaSetDigest,
         executionWireDependencies: state.executionWireSchema?.dependencies,
+        validationWireSchemaSet: state.validationWireSchema?.schemaSet,
+        validationWireSchemaSetDigest: state.validationWireSchema?.schemaSetDigest,
+        validationWireDependencies: state.validationWireSchema?.dependencies,
         wireNaming: state.wireSchema?.naming,
         outbox: summarizeOutbox(state.restoredOutbox),
         boundaries: {
@@ -200,6 +224,10 @@ export default function hpiExtension(pi: ExtensionAPI) {
           fullMultiAgentRuntime: "NOT_IMPLEMENTED",
           executionRuntimeIntake: "NOT_IMPLEMENTED",
           executionLifecycle: "SCHEMA_AND_PURE_PREVIEW_ONLY",
+          validationRuntimeIntake: "VALIDATION_ATTEMPT_INPUT_V1_ONLY",
+          validationRuntimeWriteRoot: ".pi/artifacts/hpi-validation/v1/<attempt_id>",
+          validationRuntimeAuthority: "MACHINE_VALIDATION_ONLY",
+          formalTs001Status: "NOT-RUN",
           projectMachineStatus: projection.hps.activeWork[0].machineStatus,
         },
       };
@@ -253,6 +281,20 @@ export default function hpiExtension(pi: ExtensionAPI) {
           available_project_objects: 0,
           lifecycle_mode: "SCHEMA_AND_PURE_PREVIEW_ONLY",
         },
+        validation_runtime_contract: {
+          schema_set: state.validationWireSchema?.schemaSet,
+          schema_set_digest: state.validationWireSchema?.schemaSetDigest,
+          naming: state.validationWireSchema?.naming,
+          dependencies: state.validationWireSchema?.dependencies,
+          inbound_runtime: "validation_attempt_input_only",
+          authority: "MACHINE_VALIDATION_ONLY",
+          isolated_write_root: ".pi/artifacts/hpi-validation/v1/<attempt_id>",
+          project_canonical_write: "FORBIDDEN",
+          human_result_intake: "FORBIDDEN",
+          candidate_event_intake: "FORBIDDEN",
+          agent_dispatch: "FORBIDDEN",
+          formal_ts001_status: "NOT-RUN",
+        },
       };
     }
     return {
@@ -303,8 +345,10 @@ export default function hpiExtension(pi: ExtensionAPI) {
       `wireSchemaSetDigest=${state.wireSchema?.schemaSetDigest ?? "unavailable"}`,
       `executionWireSchemaSet=${state.executionWireSchema?.schemaSet ?? "unavailable"}`,
       `executionWireSchemaSetDigest=${state.executionWireSchema?.schemaSetDigest ?? "unavailable"}`,
+      `validationWireSchemaSet=${state.validationWireSchema?.schemaSet ?? "unavailable"}`,
+      `validationWireSchemaSetDigest=${state.validationWireSchema?.schemaSetDigest ?? "unavailable"}`,
       `nextHumanDecision=${decision?.question ?? "none"}`,
-      "Rules: use hpi_query for structured status; machine facts/test counts/hash/schema are never escalated for human belief; hpi_propose creates session candidates only; HPI cannot write project canonical state.",
+      "Rules: use hpi_query for structured status; machine facts/test counts/hash/schema are never escalated for human belief; hpi_propose creates session candidates only; HPI cannot write project canonical state; hpi_validation is machine-only, writes only its isolated attempt ledger, and never constitutes formal TS-001, HumanResult, CandidateEvent, dispatch, or canonical authority.",
     ].join("\n");
     return { systemPrompt: `${event.systemPrompt}\n\n${appendix}` };
   });
@@ -332,10 +376,19 @@ export default function hpiExtension(pi: ExtensionAPI) {
         return { block: true, reason: "HPI fail-closed: unsupported proposal operation" };
       }
     }
+    if (event.toolName === "hpi_validation") {
+      const op = (event.input as { op?: string }).op;
+      if (detected.adapter !== "ts001-pilot/0.1.0") {
+        return { block: true, reason: "HPI fail-closed: validation runtime v1 supports only ts001-pilot/0.1.0" };
+      }
+      if (!VALIDATION_OPS.includes(op as (typeof VALIDATION_OPS)[number])) {
+        return { block: true, reason: "HPI fail-closed: unsupported validation operation" };
+      }
+    }
   });
 
   pi.registerCommand("hpi", {
-    description: "Open Human Project Interaction, inspect a brief/trace/decision, export frozen wire objects, or verify the read-only projection and frozen schema lineage.",
+    description: "Open Human Project Interaction, inspect a brief/trace/decision, export frozen wire objects, or verify read-only projection and validation schema lineage.",
     getArgumentCompletions: (prefix) => {
       const values = ["open", "status", "brief", "trace", "wire", "decisions", "verify", "help"];
       const items = values
@@ -354,7 +407,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
             "/hpi trace <id> — inspect semantic trace",
             "/hpi wire [id] — export frozen snake_case wire objects",
             "/hpi decisions — inspect pending requests and session candidates",
-            "/hpi verify — rebuild the read-only projection and verify the frozen interaction/execution schema lineage",
+            "/hpi verify — rebuild the read-only projection and verify frozen interaction/execution/validation schema lineage",
           ].join("\n"),
           "info",
         );
@@ -384,6 +437,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
           const second = rebuildProjectProjection(ctx.cwd);
           const verifiedWireSchema = loadWireSchemaSet();
           const verifiedExecutionWireSchema = loadExecutionWireSchemaSet();
+          const verifiedValidationWireSchema = loadValidationRuntimeWireSchemaSet();
           const deterministic = first.hps.projectionId === second.hps.projectionId;
           const result = {
             adapter: state.detected?.adapter,
@@ -395,12 +449,15 @@ export default function hpiExtension(pi: ExtensionAPI) {
             executionWireSchemaSet: verifiedExecutionWireSchema.schemaSet,
             executionWireSchemaSetDigest: verifiedExecutionWireSchema.schemaSetDigest,
             executionWireDependencies: verifiedExecutionWireSchema.dependencies,
+            validationWireSchemaSet: verifiedValidationWireSchema.schemaSet,
+            validationWireSchemaSetDigest: verifiedValidationWireSchema.schemaSetDigest,
+            validationWireDependencies: verifiedValidationWireSchema.dependencies,
             wireNaming: verifiedWireSchema.naming,
             schemaIntegrity: true,
             machine: first.hps.activeWork[0].machineStatus,
             human: first.hps.activeWork[0].humanStatus,
             outbox: summarizeOutbox(state.restoredOutbox),
-            boundary: "projection and frozen schema-lineage verification only; execution lifecycle is pure preview and the adapter does not run project tests or write canonical state",
+            boundary: "projection and frozen schema-lineage verification only; execution lifecycle is pure preview and the adapter does not run project tests or write canonical state; validation-runtime-v1 is isolated machine-only conformance, not formal TS-001",
           };
           ctx.ui.notify(compactJson(result), result.deterministic ? "info" : "error");
         } catch (error) {
@@ -441,6 +498,101 @@ export default function hpiExtension(pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const data = query(params.op, params.objectId, ctx);
+      return {
+        content: [{ type: "text", text: compactJson(data) }],
+        details: { ok: true, op: params.op, data },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "hpi_validation",
+    label: "HPI validation runtime",
+    description:
+      "Preview, run, or inspect one explicit ValidationAttemptInput v1. Run writes only an isolated append-only attempt ledger; it never runs formal TS-001 and never writes HumanResult, CandidateEvent, dispatch, or project canonical state.",
+    promptSnippet: "Run the isolated machine-only validation attempt runtime without canonical or human authority",
+    promptGuidelines: [
+      "Use only with a caller-declared project-relative ValidationAttemptInput manifest; never infer or discover one from prose, chat, raw drafts, or adjacent files.",
+      "Prefer preview before run. A local PASS-ENGINEERING applies only to Validation Runtime Slice V1 and must never be reported as formal TS-001 or P0 acceptance.",
+      "Non-terminal attempts are INCOMPLETE_INTERRUPTED and cannot resume; retry requires a new attempt ID and exact retry_of latest-record binding.",
+      "The only write root is .pi/artifacts/hpi-validation/v1/<attempt_id>; HumanResult, CandidateEvent, Agent dispatch, canonical write, and automatic invalidation are forbidden.",
+    ],
+    executionMode: "sequential",
+    parameters: Type.Object({
+      op: StringEnum(VALIDATION_OPS, { description: "Validation runtime operation" }),
+      manifestPath: Type.Optional(
+        Type.String({ description: "Project-relative ValidationAttemptInput v1 manifest path for preview/run" }),
+      ),
+      attemptId: Type.Optional(
+        Type.String({ description: "Validation attempt ID for status" }),
+      ),
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const detected = detectProjectAdapter(ctx.cwd);
+      if (!detected.available || detected.adapter !== "ts001-pilot/0.1.0") {
+        throw new Error("HPI fail-closed: validation runtime v1 requires ts001-pilot/0.1.0");
+      }
+      const boundary = {
+        authority: "MACHINE_VALIDATION_ONLY",
+        isolatedWriteRoot: ".pi/artifacts/hpi-validation/v1/<attempt_id>",
+        formalTs001Status: "NOT-RUN",
+        projectCanonicalWrite: "FORBIDDEN",
+        humanResultIntake: "FORBIDDEN",
+        candidateEventIntake: "FORBIDDEN",
+        agentDispatch: "FORBIDDEN",
+      };
+      let data: any;
+      if (params.op === "preview") {
+        if (!params.manifestPath) throw new Error("manifestPath is required for validation preview");
+        data = {
+          operation: "preview",
+          boundary,
+          preview: previewValidationAttempt(ctx.cwd, params.manifestPath),
+        };
+      } else if (params.op === "run") {
+        if (!params.manifestPath) throw new Error("manifestPath is required for validation run");
+        const completed = runAndProjectValidationAttempt(ctx.cwd, params.manifestPath);
+        const validationProjection = completed.projectionBundle?.projection;
+        data = {
+          operation: "run",
+          boundary,
+          runtime: completed.runtime,
+          ...(completed.projectionError ? { projectionError: completed.projectionError } : {}),
+          ...(validationProjection
+            ? {
+                projection: validationProjection,
+                talkStyleId: "hpi-project",
+                talkContent: buildTalkContent(validationProjection),
+              }
+            : {}),
+        };
+      } else {
+        if (!params.attemptId) throw new Error("attemptId is required for validation status");
+        const status = getValidationAttemptStatus(ctx.cwd, params.attemptId);
+        const projectable = !["NOT_FOUND", "EMPTY"].includes(status.history.kind);
+        let validationProjection: any;
+        let projectionError: string | undefined;
+        if (projectable) {
+          try {
+            validationProjection = buildValidationAttemptProjection(ctx.cwd, params.attemptId).projection;
+          } catch (error) {
+            projectionError = error instanceof Error ? error.message : String(error);
+          }
+        }
+        data = {
+          operation: "status",
+          boundary,
+          status,
+          ...(projectionError ? { projectionError } : {}),
+          ...(validationProjection
+            ? {
+                projection: validationProjection,
+                talkStyleId: "hpi-project",
+                talkContent: buildTalkContent(validationProjection),
+              }
+            : {}),
+        };
+      }
       return {
         content: [{ type: "text", text: compactJson(data) }],
         details: { ok: true, op: params.op, data },

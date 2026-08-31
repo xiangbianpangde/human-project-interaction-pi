@@ -5,7 +5,8 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 ## 当前版本与冻结边界
 
 - **TS-001 Adapter `ts001-pilot/0.1.0`**：冻结的自包含试点，只读本目录三份材料；机器状态保持 `NOT-RUN`。
-- **Package `0.5.0` candidate**：修复前三次独立审核定位的 PASS provenance/coherence、幂等 ledger、Escalation Gate、恢复与路径合同缺口；保留 execution v1 历史字节并发布 `hpi/wire/execution/v2`。
+- **Package `0.5.0` 只读基线**：精确提交 `c79542b…` 经独立复审给出 RELEASE，并以 merge commit `5cbc57a…` 合入 `main`；TS-001 仍为 `NOT-RUN`。
+- **Package `0.6.0` implementation candidate**：新增经批准的 Validation Runtime Slice V1；在独立复审与 CI 完成前不称为发布通过。
 - **完整 P0：未关闭**。详见 [FR-001～FR-024 覆盖矩阵](HPI_FR_coverage_matrix.md)。
 
 已实现的试点能力：
@@ -14,7 +15,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 - Machine Result / Human Result 双轴状态；
 - 确定性 Human Escalation Gate；
 - Pi session-only CandidateEvent outbox；
-- `hpi_query`、`hpi_propose`、`/hpi` 和生命周期 hooks；
+- `hpi_query`、`hpi_propose`、`hpi_validation`、`/hpi` 和生命周期 hooks；
 - task-layer `human-project-interaction` Skill；
 - `hpi-project` `/talk` style，含 L0–L4 渐进披露和事件回传；
 - TS-001 与 R-ICL v4 两个只读 Adapter；
@@ -23,15 +24,18 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 - 当前 `hpi/wire/execution/v2`：修正跨平台 scoped path，并锁定 interaction v1 + execution v1 的完整 digest；
 - 完整 frozen Evidence identity、`claim_refs ↔ fact_id`、唯一且结构完整的全 VERIFIED PASS fact set、全 ledger 幂等、retry 和 stale preview；
 - projector-owned EscalationRequest binding、candidate-digest-bound outbox v2、同 event ID divergent-content 冲突隔离、重复 logical ID 拒绝和有界 Adapter 读取；
+- `hpi/wire/validation-runtime/v1`：显式 ValidationAttemptInput/Record、完整 schema-set lineage 与 companion validators；
+- `hpi_validation` 的 preview/run/status：局部 Schema/Identity/Reference/Workspace/Authority Gate、隔离 append-only attempt store、exact replay、divergent conflict、retry-new-ID 和 fresh-process interruption recovery；
+- validation-only MachineResult → 受限 HPS/Human Brief 投影；局部 PASS 始终与正式 TS-001 `NOT-RUN` 并列展示；
 - 自动测试、GitHub CI、严格 Skill 校验和可逆链接安装。
 
 明确未实现：
 
 - 完整多 Agent runtime / Harness Core；
 - 项目 canonical transaction / writer；
-- 独立 Validation Agent runtime；
-- 真实 filesystem、permission、identity、artifact/reference Gate 与 Agent dispatch；
-- Bundle runtime intake、append-only event store、事务 commit 和完整 Reconciler；
+- 正式 TS-001 runner 与独立 Validation Agent runtime；
+- 通用 filesystem sandbox、完整 permission/identity/artifact/evidence Gate 与 Agent dispatch；
+- Bundle runtime intake、项目级 event store、事务 commit 和完整 Reconciler（V1 只有隔离 attempt ledger）；
 - ExperimentSpec、ValidationResult 与 Recovery transaction 的正式 schema/runtime；
 - 从按钮、自然语言或 CandidateEvent 自动生成 HumanResult；
 - TS-001 工程测试执行或 PASS 裁决。
@@ -40,11 +44,12 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 
 1. `hpi/wire/v1`：交互对象；digest `1d08d1ac…264725`。
 2. `hpi/wire/execution/v1`：0.4.0 历史执行合同；digest `450698c6…9e88d1`，保持不可修改。
-3. `hpi/wire/execution/v2`：当前执行合同；digest `bccb3739…36439c`，manifest 同时锁定上述两个祖先 digest。
+3. `hpi/wire/execution/v2`：当前通用执行合同；digest `bccb3739…36439c`，manifest 同时锁定上述两个祖先 digest。
+4. `hpi/wire/validation-runtime/v1`：隔离验证尝试合同；digest `598e1ca9…92d3fa`，锁定 interaction v1 与 execution v2。
 
 v2 没有原地修补 v1。它修正 host-independent scoped path，并由 companion codec 强制 Evidence/Task 的 `id + revision + sha256` 精确闭合。每条 Evidence ref 的 `claim_refs` 必须包含引用它的 `fact_id`；`PASS-ENGINEERING` 要求非空且全部为 VERIFIED 的事实集，每个事实都直接引用高信任 Evidence。全 ledger 在 replay 分类前检查既存 same-key/same-ID divergent revisions，结果不再依赖数组顺序。
 
-当前 JavaScript camelCase 对象只是内部实现 profile，只能通过 `src/wire.mjs` / `src/execution.mjs` 的显式单向 codec 导出。所有 manifest 的 Inbound runtime 仍是 `not_implemented`。execution lifecycle 只做无副作用的 schema/内容 revision 校验、Result replay 分类、retry candidate 和 stale preview；它不会 dispatch Agent、append event、commit Result、修改下游状态或写 canonical。成功路径仍采用无环顺序：ResultBundle 先引用冻结的 `RUNNING` Attempt snapshot，随后 terminal Attempt 新 revision 才以 `supersedes` + `terminal_result_ref` 回指。
+当前 JavaScript camelCase 对象只是内部实现 profile。interaction 与通用 execution 仍只能经 `src/wire.mjs` / `src/execution.mjs` 单向导出，其 manifest 的 Inbound runtime 保持 `not_implemented`；通用 execution lifecycle 仍只做无副作用 preview。独立 validation manifest 才声明 `inbound_runtime: validation_attempt_input_only`，且只接受一个显式输入，写入 `.pi/artifacts/hpi-validation/v1/<attempt_id>/`。它不 dispatch Agent、不接收 HumanResult/CandidateEvent、不写项目 canonical，也不改变正式 TS-001。通用 execution 成功路径仍采用无环顺序：ResultBundle 先引用冻结的 `RUNNING` Attempt snapshot，随后 terminal Attempt 新 revision才回指结果。
 
 ## Adapter 权威边界
 
@@ -68,7 +73,13 @@ v2 没有原地修补 v1。它修正 host-independent scoped path，并由 compa
 - worklog 短合同/项目文档；
 - 唯一活 worklog 的 `HEAD.md` 与 `LOG.md`。
 
-它不运行 R-ICL 工具，不修改 current/worklog/index/`库.json`，不从 `05_草稿箱`、`90_工作底稿_raw` 或 Wiki 推断当前权威。来源中的 PASS、完成或学生接受保持材料声明，不会转为 HPI `PASS-ENGINEERING` 或 HumanResult。虽然 execution schema 已冻结，但该权威读集尚无可消费记录且 runtime intake 未实现，当前真实投影继续保守显示 `machine=INCOMPLETE`、`human=NOT_NEEDED`。
+它不运行 R-ICL 工具，不修改 current/worklog/index/`库.json`，不从 `05_草稿箱`、`90_工作底稿_raw` 或 Wiki 推断当前权威。来源中的 PASS、完成或学生接受保持材料声明，不会转为 HPI `PASS-ENGINEERING` 或 HumanResult。虽然 execution schema 已冻结，但该权威读集尚无可消费记录且通用 runtime intake 未实现，当前真实投影继续保守显示 `machine=INCOMPLETE`、`human=NOT_NEEDED`。
+
+## Validation Runtime Slice V1
+
+完整设计与权威矩阵见 [`validation-runtime-slice-v1-design.md`](validation-runtime-slice-v1-design.md)。V1 固定状态机为 `DECLARED → ACCEPTED → RUNNING → TERMINAL`，并只对自身 attempt history、receipt 与 replay identity 有权威。五个局部 Gate 为 `V1_SCHEMA`、`V1_IDENTITY`、`V1_REFERENCE`、`V1_WORKSPACE`、`V1_AUTHORITY`。
+
+attempt store 使用 exclusive lock、0600 文件、0700 store 目录、temp + fsync + atomic rename。crash 后保留 non-terminal/lock 证据，不实现 stale-lock reclaim 或自动续跑。受限投影使用 Adapter label `ts001-validation-runtime/0.1.0`，primary task 的 human axis 固定 `NOT_NEEDED`，同时保留正式 TS-001 work item 的 `NOT-RUN`；若当前 Adapter source 已漂移，历史局部 PASS 只在 ledger 中保留，当前投影降为 `INCOMPLETE`。删除隔离 store 只删除验证历史，不回滚或修改项目语义状态。
 
 ## 结构
 
@@ -78,10 +89,13 @@ src/adapters/                         Adapter contract、registry、有界权威
 src/wire.mjs                           interaction camelCase → snake_case codec
 src/execution.mjs                      execution 公共 facade
 src/execution/                         contract、codecs、retry/replay/stale 纯函数
+src/validation-runtime/                intake、Gate、contract/codecs、隔离 store、runtime 与受限投影
+src/validation-runtime.mjs             validation runtime 公共 facade
 src/wire-schema.mjs                    schema lineage manifest/hash/dependency fail-closed loader
 schemas/                               冻结的 hpi/wire/v1 JSON Schema 与 manifest
 schemas/execution-v1/                  保留的 hpi/wire/execution/v1 历史合同
 schemas/execution-v2/                  当前 hpi/wire/execution/v2 合同与 manifest
+schemas/validation-runtime-v1/         ValidationAttemptInput/Record v1 与独立 manifest
 extension/hpi/index.ts                Pi Extension
 index.ts                              安装后的 package entry
 skills/task/human-project-interaction/ task-layer Skill
@@ -89,7 +103,7 @@ talk/styles/hpi-project/              /talk html-js style pack
 tests/                                单元、wire fixtures、负向、恢复、loader、style、安装测试
 tests/integration/                    显式真实项目只读集成
 scripts/                              可逆安装与 Skill 校验入口
-.github/workflows/ci.yml               Linux Node 22.19/latest + Windows execution-contract CI
+.github/workflows/ci.yml               Linux Node 22.19/latest + Windows execution/validation contract CI
 ```
 
 安装使用符号链接，不复制 Skill、Extension 或 style，因此只有一份源树。
@@ -140,7 +154,17 @@ npm run link:uninstall
 /hpi verify
 ```
 
-`/hpi` 路由到 Skill。Skill 将 `hpi_query(op="brief")` 返回的 `talkContentJson` 原样交给 `talk_render(styleId="hpi-project")`。`/hpi wire [id]` 直接返回只读 interaction wire objects，并附当前 execution v2 set/digest、祖先依赖、`available_project_objects: 0` 与 runtime/writer 边界；它不启动 Agent turn，也不接受 inbound 数据。
+`/hpi` 路由到 Skill。Skill 将 `hpi_query(op="brief")` 返回的 `talkContentJson` 原样交给 `talk_render(styleId="hpi-project")`。`/hpi wire [id]` 直接返回只读 interaction wire objects，并附 execution v2 与 validation-runtime-v1 lineage；它不启动 Agent turn。
+
+`hpi_validation` 只接受调用方明确给出的 project-relative manifest：
+
+```text
+hpi_validation(op="preview", manifestPath=".pi/validation-inputs/<manifest>.json")
+hpi_validation(op="run", manifestPath=".pi/validation-inputs/<manifest>.json")
+hpi_validation(op="status", attemptId="<attempt-id>")
+```
+
+先 preview 再 run。preview 零写入；run 只写 attempt 专属隔离根。相同 input 的 terminal replay 不追加；同 attempt ID 的 divergent input 返回 conflict；non-terminal history 只解释为 `INCOMPLETE_INTERRUPTED`，重试必须使用新 ID 与精确 `retry_of`。该工具的 `PASS-ENGINEERING` 只属于 V1 局部 Gate，不是正式 TS-001、P0、HumanResult 或 canonical 接受。
 
 `hpi_propose(op="escalation")` 不再从任意自然语言 mint HumanEscalationRequest。候选必须绑定 projector 当前产生的 `requestId + requestDigest + sourceDigest`；regex 仅作为额外机器事实拒绝层。`talk_poll_events` 返回的 HPI 事件仍必须完整传给 `hpi_propose(op="ingest_talk_event")`。
 
@@ -158,6 +182,7 @@ CandidateEvent → Pi session outbox → PENDING_CANONICAL_WRITER
 npm test
 npm run test:wire
 npm run test:execution-wire
+npm run test:validation-runtime
 npm run validate:skill
 npm run verify
 ```
@@ -182,7 +207,9 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 8. 任意自然语言不能绕过 projector-owned request binding 变成人类问题；
 9. outbox v2 将完整 candidate digest 绑定到 receipt；同 `eventId` 不同 digest 产生确定性 `CANDIDATE_IDENTITY_CONFLICT` 且不恢复任一候选；malformed entry 只隔离单条；
 10. scoped path 跨平台 fail closed，timestamp codec 成功的对象必须通过 frozen schema；
-11. Adapter 不跟随 symlink、不读取非普通或超限权威输入；
-12. `NOT-RUN` 不得显示为 PASS；Machine 与 Human 状态不得合并；HPI 不写项目 canonical。
+11. Adapter 与 validation intake 不跟随 symlink、不读取非普通或超限输入；ref SHA 必须等于原始 bytes；
+12. validation record 必须连续、内容寻址并完整绑定五个 Gate；PASS MachineResult 必须一 Gate 一 fact 且引用 immutable RUNNING record；
+13. exact replay 零追加；divergent attempt conflict；fresh process 中 non-terminal 永不恢复成完成，残留 lock 不自动夺取；
+14. store 外项目权威文件前后 SHA 不变；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并。
 
-GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.4.0 baseline `9b46061`、首个 0.5 修复 commit `0fdaf17` 与第二个候选 `b578cdf` 均被独立审核判定 BLOCK；当前 follow-up candidate 仍需新的独立复核与 CI 结果，不能据此宣称发布通过或完整 P0。
+GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。当前 0.6 Validation Runtime Slice V1 仍需新的独立复审与 CI，且无论结果如何都不能据此宣称正式 TS-001、完整 P0、HumanResult 或 canonical 接受。

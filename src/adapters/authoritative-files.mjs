@@ -131,7 +131,7 @@ export function inspectAuthoritativeFiles(projectRoot, files, { maxBytes = DEFAU
   };
 }
 
-function readBoundedRegularFile(root, rootReal, pointer, maxBytes) {
+function readBoundedRegularFileBytes(root, rootReal, pointer, maxBytes) {
   const inspected = inspectOne(root, rootReal, pointer, maxBytes);
   if (inspected.missing) throw new AuthoritativeFileError(`authority file is missing: ${pointer}`);
   const noFollow = constants.O_NOFOLLOW ?? 0;
@@ -157,13 +157,13 @@ function readBoundedRegularFile(root, rootReal, pointer, maxBytes) {
       }
       chunks.push(buffer.subarray(0, count));
     }
-    return Buffer.concat(chunks, total).toString("utf8");
+    return Buffer.concat(chunks, total);
   } finally {
     closeSync(descriptor);
   }
 }
 
-export function readAuthoritativeFiles(projectRoot, files, options = {}) {
+function inspectReadableSet(projectRoot, files, options) {
   const inspected = inspectAuthoritativeFiles(projectRoot, files, options);
   if (!inspected.available) {
     throw new AuthoritativeFileError("declared authority file set is unavailable", {
@@ -171,10 +171,24 @@ export function readAuthoritativeFiles(projectRoot, files, options = {}) {
       unsafe: inspected.unsafe,
     });
   }
+  return inspected;
+}
+
+export function readAuthoritativeFileBuffers(projectRoot, files, options = {}) {
+  const inspected = inspectReadableSet(projectRoot, files, options);
   return Object.fromEntries(
     Object.entries(files).map(([key, pointer]) => [
       key,
-      readBoundedRegularFile(inspected.root, inspected.rootReal, pointer, inspected.maxBytes),
+      readBoundedRegularFileBytes(inspected.root, inspected.rootReal, pointer, inspected.maxBytes),
+    ]),
+  );
+}
+
+export function readAuthoritativeFiles(projectRoot, files, options = {}) {
+  return Object.fromEntries(
+    Object.entries(readAuthoritativeFileBuffers(projectRoot, files, options)).map(([key, bytes]) => [
+      key,
+      bytes.toString("utf8"),
     ]),
   );
 }

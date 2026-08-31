@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:validation-runtime-common:v1",
+  "title": "HPI Validation Runtime Wire v1 Common Definitions",
+  "$defs": {
+    "validation_attempt_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "project_canonical_write",
+        "project_semantic_state_write",
+        "human_result_intake",
+        "candidate_event_intake",
+        "agent_dispatch",
+        "automatic_canonical_invalidation",
+        "network"
+      ],
+      "properties": {
+        "mode": {
+          "const": "MACHINE_VALIDATION_ONLY"
+        },
+        "project_canonical_write": {
+          "const": "FORBIDDEN"
+        },
+        "project_semantic_state_write": {
+          "const": "FORBIDDEN"
+        },
+        "human_result_intake": {
+          "const": "FORBIDDEN"
+        },
+        "candidate_event_intake": {
+          "const": "FORBIDDEN"
+        },
+        "agent_dispatch": {
+          "const": "FORBIDDEN"
+        },
+        "automatic_canonical_invalidation": {
+          "const": "FORBIDDEN"
+        },
+        "network": {
+          "const": "DENY"
+        }
+      }
+    },
+    "runtime_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime_id",
+        "runtime_version",
+        "schema_set",
+        "schema_set_digest"
+      ],
+      "properties": {
+        "runtime_id": {
+          "const": "hpi-validation-runtime"
+        },
+        "runtime_version": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        },
+        "schema_set": {
+          "const": "hpi/wire/validation-runtime/v1"
+        },
+        "schema_set_digest": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/sha256"
+        }
+      }
+    },
+    "schema_set_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_set",
+        "schema_set_digest"
+      ],
+      "properties": {
+        "schema_set": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        },
+        "schema_set_digest": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/sha256"
+        }
+      }
+    },
+    "gate_outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate",
+        "status",
+        "code",
+        "evidence_refs"
+      ],
+      "properties": {
+        "gate": {
+          "type": "string",
+          "enum": [
+            "V1_SCHEMA",
+            "V1_IDENTITY",
+            "V1_REFERENCE",
+            "V1_WORKSPACE",
+            "V1_AUTHORITY"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "PASSED",
+            "FAILED",
+            "NOT_RUN"
+          ]
+        },
+        "code": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "urn:hpi:wire:execution-common:v2#/$defs/frozen_ref"
+          }
+        }
+      }
+    }
+  }
+}

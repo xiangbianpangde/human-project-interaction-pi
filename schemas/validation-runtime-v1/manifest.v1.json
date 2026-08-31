@@ -1,0 +1,41 @@
+{
+  "schema_set": "hpi/wire/validation-runtime/v1",
+  "naming": "snake_case",
+  "compatibility": {
+    "external_keys": "snake_case_only",
+    "internal_keys": "camelCase",
+    "mixed_keys": "rejected",
+    "inbound_runtime": "validation_attempt_input_only"
+  },
+  "dependencies": [
+    {
+      "schema_set": "hpi/wire/v1",
+      "schema_set_digest": "1d08d1acdda0cf05b29aae46949c900e49349eb21225d75698c6a44c34264725"
+    },
+    {
+      "schema_set": "hpi/wire/execution/v2",
+      "schema_set_digest": "bccb373985dacfdff8eaa1c2f7001cb4644a1d4c931e5359ce4200f69836439c"
+    }
+  ],
+  "schemas": [
+    {
+      "name": "validation_runtime_common",
+      "id": "urn:hpi:wire:validation-runtime-common:v1",
+      "path": "validation-runtime-common.v1.schema.json",
+      "sha256": "ba486f10db5c509588c078eac61cbb50797fa651ac102e43e469485acb6ebeef"
+    },
+    {
+      "name": "validation_attempt_input",
+      "id": "urn:hpi:wire:validation-attempt-input:v1",
+      "path": "validation-attempt-input.v1.schema.json",
+      "sha256": "3c180a48df2c64c8ffe77033f2f6d7f13384a86fede782dd209996fb0c66fdb1"
+    },
+    {
+      "name": "validation_attempt_record",
+      "id": "urn:hpi:wire:validation-attempt-record:v1",
+      "path": "validation-attempt-record.v1.schema.json",
+      "sha256": "a1f64f8de890c2b43793618397d39bdc7b360bee18671964531ae84940075555"
+    }
+  ],
+  "schema_set_digest": "598e1ca92f6cedeb97e2e00a4c22703ca5359977c3bd9681a015231fa692d3fa"
+}

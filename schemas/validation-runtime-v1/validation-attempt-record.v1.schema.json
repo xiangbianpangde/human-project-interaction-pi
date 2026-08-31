@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:validation-attempt-record:v1",
+  "title": "HPI Validation Attempt Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "record_id",
+    "record_revision",
+    "validation_attempt_id",
+    "sequence",
+    "phase",
+    "outcome",
+    "input_ref",
+    "runtime",
+    "authority",
+    "gate_outcomes",
+    "recorded_at"
+  ],
+  "properties": {
+    "schema": {
+      "const": "hpi/wire/validation-attempt-record/v1"
+    },
+    "record_id": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+    },
+    "record_revision": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/sha256"
+    },
+    "validation_attempt_id": {
+      "$ref": "urn:hpi:wire:validation-runtime-common:v1#/$defs/validation_attempt_id"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "DECLARED",
+        "ACCEPTED",
+        "RUNNING",
+        "TERMINAL"
+      ]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": [
+        "NONE",
+        "MACHINE_RESULT_PRODUCED",
+        "INPUT_REJECTED",
+        "INCOMPLETE_INTERRUPTED",
+        "BLOCKED_CONFLICT"
+      ]
+    },
+    "input_ref": {
+      "$ref": "urn:hpi:wire:execution-common:v2#/$defs/frozen_ref"
+    },
+    "runtime": {
+      "$ref": "urn:hpi:wire:validation-runtime-common:v1#/$defs/runtime_identity"
+    },
+    "authority": {
+      "$ref": "urn:hpi:wire:validation-runtime-common:v1#/$defs/authority"
+    },
+    "gate_outcomes": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:hpi:wire:validation-runtime-common:v1#/$defs/gate_outcome"
+      }
+    },
+    "machine_result_ref": {
+      "$ref": "urn:hpi:wire:execution-common:v2#/$defs/frozen_ref"
+    },
+    "previous_record_ref": {
+      "$ref": "urn:hpi:wire:execution-common:v2#/$defs/frozen_ref"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "phase"
+        ],
+        "properties": {
+          "phase": {
+            "const": "TERMINAL"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "MACHINE_RESULT_PRODUCED",
+              "INPUT_REJECTED",
+              "INCOMPLETE_INTERRUPTED",
+              "BLOCKED_CONFLICT"
+            ]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "outcome": {
+            "const": "NONE"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "outcome"
+        ],
+        "properties": {
+          "outcome": {
+            "const": "MACHINE_RESULT_PRODUCED"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "machine_result_ref": {}
+        },
+        "required": [
+          "machine_result_ref"
+        ]
+      },
+      "else": {
+        "not": {
+          "properties": {
+            "machine_result_ref": {}
+          },
+          "required": [
+            "machine_result_ref"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "sequence"
+        ],
+        "properties": {
+          "sequence": {
+            "const": 0
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "properties": {
+            "previous_record_ref": {}
+          },
+          "required": [
+            "previous_record_ref"
+          ]
+        }
+      },
+      "else": {
+        "properties": {
+          "previous_record_ref": {}
+        },
+        "required": [
+          "previous_record_ref"
+        ]
+      }
+    }
+  ]
+}

@@ -11,6 +11,7 @@ const skill = read("skills/task/human-project-interaction/SKILL.md");
 const manifest = JSON.parse(read("talk/styles/hpi-project/manifest.json"));
 const executionV1Manifest = JSON.parse(read("schemas/execution-v1/manifest.v1.json"));
 const executionV2Manifest = JSON.parse(read("schemas/execution-v2/manifest.v2.json"));
+const validationManifest = JSON.parse(read("schemas/validation-runtime-v1/manifest.v1.json"));
 const packageJson = JSON.parse(read("package.json"));
 const ci = read(".github/workflows/ci.yml");
 const gitAttributes = read(".gitattributes");
@@ -37,7 +38,7 @@ describe("implementation documentation", () => {
   });
 
   it("tracks package, Skill, independently versioned style, and execution lineage releases", () => {
-    assert.equal(packageJson.version, "0.5.0");
+    assert.equal(packageJson.version, "0.6.0");
     assert.equal(manifest.version, "0.2.0");
     assert.equal(executionV1Manifest.schema_set, "hpi/wire/execution/v1");
     assert.equal(executionV1Manifest.schema_set_digest, "450698c6e3218b3419f081dc47576f94edaea36ee0da6a97b35c80ef6d9e88d1");
@@ -47,13 +48,20 @@ describe("implementation documentation", () => {
       executionV2Manifest.dependencies.map((dependency) => dependency.schema_set),
       ["hpi/wire/v1", "hpi/wire/execution/v1"],
     );
-    assert.match(skill, /version: "0\.5\.0"/u);
-    assert.match(changelog, /^## 0\.5\.0 - 2026-08-31$/mu);
+    assert.equal(validationManifest.schema_set, "hpi/wire/validation-runtime/v1");
+    assert.equal(validationManifest.schema_set_digest, "598e1ca92f6cedeb97e2e00a4c22703ca5359977c3bd9681a015231fa692d3fa");
+    assert.deepEqual(
+      validationManifest.dependencies.map((dependency) => dependency.schema_set),
+      ["hpi/wire/v1", "hpi/wire/execution/v2"],
+    );
+    assert.match(skill, /version: "0\.6\.0"/u);
+    assert.match(changelog, /^## 0\.6\.0 - 2026-08-31$/mu);
   });
 
   it("aligns the Node floor and cross-platform checkout with the pinned Pi runtime", () => {
     assert.equal(packageJson.engines.node, ">=22.19.0");
     assert.match(ci, /node: \[22\.19\.0, 22\.x\]/u);
+    assert.match(ci, /test:validation-contract/u);
     assert.doesNotMatch(ci, /20\.x/u);
     assert.match(gitAttributes, /^\* text=auto eol=lf$/mu);
   });
@@ -65,9 +73,10 @@ describe("implementation documentation", () => {
     assert.match(readme, /hpi\/wire\/v1/u);
     assert.match(readme, /hpi\/wire\/execution\/v1/u);
     assert.match(readme, /hpi\/wire\/execution\/v2/u);
+    assert.match(readme, /hpi\/wire\/validation-runtime\/v1/u);
     assert.match(readme, /snake_case-only/u);
     assert.match(readme, /Inbound runtime.*`not_implemented`/u);
-    assert.match(readme, /execution lifecycle 只做无副作用/u);
+    assert.match(readme, /通用 execution lifecycle 仍只做无副作用 preview/u);
     assert.match(readme, /projector-owned/u);
     assert.doesNotMatch(readme, /\/Users\/xbpd\/Projects\/交互skills|\/opt\/homebrew/u);
   });
