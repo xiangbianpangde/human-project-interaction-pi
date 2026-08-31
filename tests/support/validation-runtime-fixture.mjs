@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,7 +23,8 @@ const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 export function populateTs001Authority(root) {
   for (const pointer of Object.values(TS001_FILES)) {
-    cpSync(join(repositoryRoot, pointer), join(root, pointer));
+    const target = join(root, pointer);
+    if (!existsSync(target)) cpSync(join(repositoryRoot, pointer), target);
   }
   return loadTs001Pilot(root);
 }
