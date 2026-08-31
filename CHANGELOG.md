@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0 - 2026-08-31
+
+- Freeze `hpi/wire/validation-runtime/v1` for closed ValidationAttemptInput/Record objects, with exact interaction-v1 and execution-v2 dependencies and schema-set digest `598e1ca92f6cedeb97e2e00a4c22703ca5359977c3bd9681a015231fa692d3fa`.
+- Add one explicit-manifest intake and five local Gates: schema, closed TS-001 identity, bounded raw-byte reference hashes, isolated workspace/network denial, and fixed machine-only authority.
+- Add the append-only `.pi/artifacts/hpi-validation/v1/<attempt_id>` store with exclusive attempt locks, immutable content revisions, fsync + atomic rename, strict record/result resolution, and one-Gate-one-fact PASS binding.
+- Implement `DECLARED → ACCEPTED → RUNNING → TERMINAL`, exact terminal replay without append, deterministic same-ID divergent-input conflict, new-ID retry with exact prior-latest binding, and no non-terminal automatic resume.
+- Add true fresh-process interruption and crash-lock recovery tests; stale locks are never reclaimed automatically and `/reload` is not used as restart proof.
+- Add validation-only MachineResult → restricted HPS/Human Brief projection and the `hpi_validation` preview/run/status tool; preview is zero-write, run cannot write outside the isolated attempt store, and runtime/status current results plus projection fail closed on current-source drift/unavailability without mutating historical results.
+- Cover workspace/authority expansion, retry success/non-latest/locked refs, duplicate snapshots, immutable-content/filename conflicts, and R-ICL rejection; run contract, store, and runtime tests on Windows while keeping POSIX `SIGKILL` recovery on Linux.
+- Keep formal TS-001 `NOT-RUN`; do not add an independent Validation Agent, Agent dispatch, HumanResult/CandidateEvent intake, canonical writer, automatic invalidation, generalized Reconciler, or project transaction authority.
+- Record that the 0.5.0 read-only baseline was independently reviewed as RELEASE and merged to `main`; the completed 0.6.0 VRS1 candidate also received an independent source-review RELEASE with no remaining P1/P2 and passed Linux/Windows CI, without implying formal TS-001, P0, HumanResult, or canonical acceptance.
+
 ## 0.5.0 - 2026-08-31
 
 - Preserve every `hpi/wire/execution/v1` byte and publish `hpi/wire/execution/v2` after an independent review blocked the 0.4 baseline; pin both interaction v1 and execution v1 digests in the v2 manifest.

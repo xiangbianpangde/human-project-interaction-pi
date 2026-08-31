@@ -15,13 +15,14 @@ The immutable JSON Schema 2020-12 lineage uses snake_case-only external keys:
 
 1. `hpi/wire/v1` covers HPS, MachineResult, HumanResult, HumanBrief, EscalationRequest, and TraceLink.
 2. `hpi/wire/execution/v1` is the preserved 0.4 execution contract.
-3. `hpi/wire/execution/v2` is the current execution contract; its manifest pins the exact interaction-v1 and execution-v1 set digests.
+3. `hpi/wire/execution/v2` is the current generic execution contract; its manifest pins the exact interaction-v1 and execution-v1 set digests.
+4. `hpi/wire/validation-runtime/v1` covers ValidationAttemptInput/Record; its manifest pins interaction-v1 and execution-v2.
 
 v2 supersedes rather than edits v1. It defines host-independent POSIX scoped paths; verdict derivation and its deterministic companion validator share a non-empty, structurally valid, uniquely identified, all-VERIFIED PASS fact-set contract. The execution companion additionally requires full `id + revision + sha256` Task/Evidence identity, `claim_refs` binding to the exact fact, direct high-trust Evidence, duplicate Evidence-id rejection, and complete-ledger conflict checks before replay classification.
 
-The camelCase objects inside the Pi runtime are an internal profile; only `src/wire.mjs` / `src/execution.mjs` codecs may export them. Each manifest pins every schema SHA and complete set digest. Missing files, byte drift, dependency drift, mixed casing, or a digest mismatch fail closed before projection/query.
+The camelCase objects inside the Pi runtime are an internal profile; interaction/generic execution use `src/wire.mjs` / `src/execution.mjs`, while validation input/record crosses only through `src/validation-runtime/codecs.mjs`. Each manifest pins every schema SHA and complete set digest. Missing files, byte drift, dependency drift, mixed casing, or a digest mismatch fail closed before projection/query/intake.
 
-Inbound runtime remains `not_implemented`. Execution helpers only check immutable content revisions and return Result replay/conflict classifications, retry candidates, or `PREVIEW_ONLY` stale reports. Schema validity never authorizes Bundle intake, Agent dispatch, Result commit, automatic canonical invalidation, HumanResult intake, or canonical writes.
+Interaction and generic execution inbound runtime remain `not_implemented`. Validation alone declares `validation_attempt_input_only`: it can append only one isolated attempt ledger and has no Bundle, Agent dispatch, HumanResult/CandidateEvent, automatic invalidation, project commit, or canonical authority.
 
 ## Public commands
 
@@ -33,7 +34,7 @@ Inbound runtime remains `not_implemented`. Execution helpers only check immutabl
 | `/hpi trace <id>` | Read matching TraceLinks |
 | `/hpi wire [id]` | Export schema-bound snake_case objects without starting an Agent turn |
 | `/hpi decisions` | Read current requests and the session candidate outbox |
-| `/hpi verify` | Rebuild the projection and verify the pinned interaction-v1 → execution-v1 → execution-v2 lineage; does not run TS-001 |
+| `/hpi verify` | Rebuild the projection and verify interaction/execution/validation lineage; does not run formal TS-001 |
 
 ## `hpi_query`
 
@@ -53,13 +54,31 @@ All operations are read-only.
 - `talkContent`: parsed `hpi/talk/v1` object;
 - `talkContentJson`: exact JSON string for `talk_render`;
 - `wireContract`: interaction schema-set id, naming rule, and pinned digest;
-- `executionWireContract`: current execution-v2 set id, naming rule, pinned digest, and immutable ancestor dependencies.
+- `executionWireContract`: current execution-v2 set id, naming rule, pinned digest, and immutable ancestor dependencies;
+- status/wire metadata also exposes validation-runtime-v1 set id/digest and fixed machine-only boundary when available.
 
 Do not regenerate `talkContentJson` from prose.
 
 Identity boundaries are explicit: `sourceDigest` identifies the Adapter plus canonical source snapshot, `meta.projectionId` identifies HPS, and `meta.briefId` identifies the content-addressed Human Brief. A presentation-only brief change may keep the same source/HPS ids while changing `briefId`.
 
-`wire` returns current interaction objects plus `execution_contract`. `available_project_objects: 0` is an explicit absence result: do not infer TaskSlice/Handoff/Result/Evidence from source prose. ResultBundle uses `CANDIDATE_ONLY_NOT_PROJECT_CANONICAL`; StaleReport uses `PREVIEW_ONLY` and `project_canonical_changed: false`; retry must create a new attempt id and preserve the previous terminal revision.
+`wire` returns current interaction objects plus `execution_contract` and validation-runtime contract metadata. `available_project_objects: 0` is an explicit absence result: do not infer TaskSlice/Handoff/Result/Evidence from source prose. ResultBundle uses `CANDIDATE_ONLY_NOT_PROJECT_CANONICAL`; StaleReport uses `PREVIEW_ONLY` and `project_canonical_changed: false`.
+
+## `hpi_validation`
+
+```json
+{
+  "op": "preview | run | status",
+  "manifestPath": "required project-relative path for preview/run",
+  "attemptId": "required for status"
+}
+```
+
+- The runtime accepts one explicit manifest; it never scans or infers input.
+- `preview` is zero-write. `run` may write only `.pi/artifacts/hpi-validation/v1/<attempt_id>`.
+- The chain is `DECLARED → ACCEPTED → RUNNING → TERMINAL`; every record binds all five V1 Gates and immutable predecessor/input refs.
+- Exact terminal replay appends nothing. Same-ID divergent input returns conflict. Non-terminal history is interrupted, never resumed. Retry uses a new ID and exact prior latest-record ref.
+- A produced PASS is local to validation-runtime-v1. The restricted projection keeps formal TS-001 `NOT-RUN`, Human status separate, and no escalation request.
+- Stale locks, unexpected/temp files, missing sequence, revision mismatch, ref drift, result/Gate mismatch, or scope expansion fail closed.
 
 ## `hpi_propose`
 
@@ -162,4 +181,5 @@ The current authoritative contract says `test_status: NOT-RUN`. Therefore:
 - `117/117 tests passed`, `hash verified`, or equivalent Agent prose is at most `SELF_REPORTED`;
 - the Machine Result remains `NOT-RUN`;
 - the valid human question is whether to accept the baseline-first design route;
-- no HPI output may imply P0 MVP acceptance, canonical intake, scientific support, or clinical conclusion.
+- a local validation-runtime-v1 PASS may prove only its declared five-Gate attempt and must be displayed beside formal `NOT-RUN`;
+- no HPI output may imply formal TS-001, independent Validation Agent, P0 MVP acceptance, canonical intake, scientific support, or clinical conclusion.

@@ -62,7 +62,7 @@ describe("reversible Pi link installation", () => {
     const loaded = await loadPiExtensions([join(agentDir, "extensions/hpi/index.ts")], rootPath);
     assert.deepEqual(loaded.errors, []);
     assert.equal(loaded.extensions.length, 1);
-    assert.deepEqual([...loaded.extensions[0].tools.keys()].sort(), ["hpi_propose", "hpi_query"]);
+    assert.deepEqual([...loaded.extensions[0].tools.keys()].sort(), ["hpi_propose", "hpi_query", "hpi_validation"]);
 
     const skill = await readFile(join(agentDir, "skills/task/human-project-interaction/SKILL.md"), "utf8");
     const manifest = JSON.parse(

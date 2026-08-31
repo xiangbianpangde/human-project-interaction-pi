@@ -1,13 +1,15 @@
 {
   "name": "human-project-interaction-pi",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
-  "description": "Read-only Human Project State, frozen interaction/execution wire schemas, pure retry/stale previews, deterministic escalation gate, session candidate outbox, and /talk project interaction surface for Pi.",
+  "description": "Read-only Human Project State plus a machine-only isolated validation-attempt runtime with frozen wire contracts, deterministic replay/recovery, and no canonical or HumanResult authority.",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "test:wire": "node --test tests/wire-contract.test.mjs",
     "test:execution-wire": "node --test tests/execution-wire.test.mjs",
+    "test:validation-runtime": "node --test tests/validation-runtime-contract.test.mjs tests/validation-runtime-store.test.mjs tests/validation-runtime.test.mjs",
+    "test:validation-contract": "node --test tests/validation-runtime-contract.test.mjs",
     "test:ricl": "node --test tests/integration/ricl-real.mjs",
     "validate:skill": "node scripts/validate-skill.mjs",
     "verify": "npm run test && npm run validate:skill",
@@ -18,9 +20,11 @@
   "engines": {
     "node": ">=22.19.0"
   },
-  "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.84.2",
+  "dependencies": {
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.84.2"
   }
 }

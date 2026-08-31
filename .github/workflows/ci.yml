@@ -34,7 +34,7 @@ jobs:
         run: npm test
 
   windows-contract:
-    name: Execution contract / Windows
+    name: Execution + validation runtime / Windows
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -46,5 +46,5 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
-      - name: Run cross-platform execution contract tests
-        run: npm run test:execution-wire
+      - name: Run cross-platform execution and validation runtime tests
+        run: npm run test:execution-wire && npm run test:validation-runtime
