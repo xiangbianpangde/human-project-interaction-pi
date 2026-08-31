@@ -212,4 +212,4 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 13. exact replay 零追加；divergent attempt conflict；fresh process 中 non-terminal 永不恢复成完成，残留 lock 不自动夺取；
 14. store 外项目权威文件前后 SHA 不变；historical PASS 在 current-source 漂移/不可用时不得由 runtime 或投影显示为当前 PASS；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并。
 
-GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。当前 0.6 Validation Runtime Slice V1 仍需新的独立复审与 CI，且无论结果如何都不能据此宣称正式 TS-001、完整 P0、HumanResult 或 canonical 接受。
+GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。0.6 Validation Runtime Slice V1 候选也已完成独立源码复审（RELEASE、无剩余 P1/P2）及 Linux/Windows CI；该结论仍只覆盖 VRS1，不得据此宣称正式 TS-001、完整 P0、HumanResult 或 canonical 接受。

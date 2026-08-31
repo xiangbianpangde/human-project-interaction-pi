@@ -10,7 +10,7 @@
 - Add validation-only MachineResult → restricted HPS/Human Brief projection and the `hpi_validation` preview/run/status tool; preview is zero-write, run cannot write outside the isolated attempt store, and runtime/status current results plus projection fail closed on current-source drift/unavailability without mutating historical results.
 - Cover workspace/authority expansion, retry success/non-latest/locked refs, duplicate snapshots, immutable-content/filename conflicts, and R-ICL rejection; run contract, store, and runtime tests on Windows while keeping POSIX `SIGKILL` recovery on Linux.
 - Keep formal TS-001 `NOT-RUN`; do not add an independent Validation Agent, Agent dispatch, HumanResult/CandidateEvent intake, canonical writer, automatic invalidation, generalized Reconciler, or project transaction authority.
-- Record that the 0.5.0 read-only baseline was independently reviewed as RELEASE and merged to `main`; the 0.6.0 candidate still requires its own independent review and CI.
+- Record that the 0.5.0 read-only baseline was independently reviewed as RELEASE and merged to `main`; the completed 0.6.0 VRS1 candidate also received an independent source-review RELEASE with no remaining P1/P2 and passed Linux/Windows CI, without implying formal TS-001, P0, HumanResult, or canonical acceptance.
 
 ## 0.5.0 - 2026-08-31
 
