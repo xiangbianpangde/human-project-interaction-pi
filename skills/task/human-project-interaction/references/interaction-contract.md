@@ -17,7 +17,7 @@ The immutable JSON Schema 2020-12 lineage uses snake_case-only external keys:
 2. `hpi/wire/execution/v1` is the preserved 0.4 execution contract.
 3. `hpi/wire/execution/v2` is the current execution contract; its manifest pins the exact interaction-v1 and execution-v1 set digests.
 
-v2 supersedes rather than edits v1. It defines host-independent POSIX scoped paths; its deterministic companion validator requires full `id + revision + sha256` Task/Evidence identity, `claim_refs` binding to the exact fact, a non-empty all-VERIFIED PASS fact set with direct high-trust Evidence, duplicate fact/Evidence-id rejection, and complete-ledger conflict checks before replay classification.
+v2 supersedes rather than edits v1. It defines host-independent POSIX scoped paths; verdict derivation and its deterministic companion validator share a non-empty, structurally valid, uniquely identified, all-VERIFIED PASS fact-set contract. The execution companion additionally requires full `id + revision + sha256` Task/Evidence identity, `claim_refs` binding to the exact fact, direct high-trust Evidence, duplicate Evidence-id rejection, and complete-ledger conflict checks before replay classification.
 
 The camelCase objects inside the Pi runtime are an internal profile; only `src/wire.mjs` / `src/execution.mjs` codecs may export them. Each manifest pins every schema SHA and complete set digest. Missing files, byte drift, dependency drift, mixed casing, or a digest mismatch fail closed before projection/query.
 

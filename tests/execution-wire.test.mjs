@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-import { sha256 } from "../src/contracts.mjs";
+import { deriveMachineVerdict, sha256, validateMachineResult } from "../src/contracts.mjs";
 import {
   ATTEMPT_STATUSES,
   EVIDENCE_STATUSES,
@@ -44,6 +44,7 @@ import {
   loadWireSchemaSet,
 } from "../src/wire-schema.mjs";
 import { frozenIdentityKey } from "../src/execution/contract.mjs";
+import { toWireMachineResult } from "../src/wire.mjs";
 import { buildExecutionFixture } from "./support/execution-fixture.mjs";
 
 const v1FixtureRoot = new URL("./fixtures/execution-wire-contract/", import.meta.url);
@@ -418,6 +419,17 @@ describe("execution wire codecs and cross-field gates", () => {
       limitations: [],
       unresolved: [],
     };
+    assert.equal(
+      deriveMachineVerdict({
+        authoritativeVerdict: "PASS-ENGINEERING",
+        claimedVerdict: "PASS-ENGINEERING",
+        facts: passMachineResult.facts,
+      }),
+      "PASS-ENGINEERING",
+    );
+    assert.equal(validateMachineResult(passMachineResult), passMachineResult);
+    assert.equal(toWireMachineResult(passMachineResult).verdict, "PASS-ENGINEERING");
+
     const pass = toWireResultBundle({
       ...structuredClone(inputs.resultInput),
       attemptRecord: runningAttempt,
@@ -430,6 +442,38 @@ describe("execution wire codecs and cross-field gates", () => {
     const validation = validateFixture(createAjv(), "result_bundle", pass);
     assert.equal(validation.valid, true, JSON.stringify(validation.errors));
     assert.equal(pass.attempt_ref.revision, runningAttempt.attempt_revision);
+
+    const unidentifiedFact = structuredClone(passMachineResult.facts[0]);
+    delete unidentifiedFact.id;
+    const invalidFactSets = [
+      [passMachineResult.facts[0], structuredClone(passMachineResult.facts[0])],
+      [unidentifiedFact],
+      [{ ...structuredClone(passMachineResult.facts[0]), evidenceRefs: [{}] }],
+    ];
+    for (const facts of invalidFactSets) {
+      assert.equal(
+        deriveMachineVerdict({
+          authoritativeVerdict: "PASS-ENGINEERING",
+          claimedVerdict: "PASS-ENGINEERING",
+          facts,
+        }),
+        "INCOMPLETE",
+      );
+      const invalidMachineResult = { ...structuredClone(passMachineResult), facts };
+      assert.throws(() => validateMachineResult(invalidMachineResult));
+      assert.throws(() => toWireMachineResult(invalidMachineResult));
+      assert.throws(() =>
+        toWireResultBundle({
+          ...structuredClone(inputs.resultInput),
+          attemptRecord: runningAttempt,
+          machineResult: invalidMachineResult,
+          evidenceRecords: [verifiedEvidence],
+          failure: { kind: "NONE", summary: "", retryable: false },
+          unresolved: [],
+          nextAttempt: null,
+        }),
+      );
+    }
 
     const contradictoryFact = {
       id: "FACT-FIXTURE-FAILED",

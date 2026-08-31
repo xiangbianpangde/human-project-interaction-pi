@@ -229,23 +229,11 @@ export function validateSourceRef(value, path = "sourceRef") {
   return value;
 }
 
-export function validateMachineResult(value, path = "machineResult") {
-  const object = exactKeys(
-    value,
-    ["schema", "resultId", "taskId", "attemptId", "sourceRef", "verdict", "facts", "limitations", "unresolved"],
-    ["schema", "resultId", "taskId", "attemptId", "sourceRef", "verdict", "facts", "limitations", "unresolved"],
-    path,
-  );
-  if (object.schema !== SCHEMAS.machineResult) fail(`${path}.schema`, `must equal ${SCHEMAS.machineResult}`);
-  stringAt(object.resultId, `${path}.resultId`);
-  stringAt(object.taskId, `${path}.taskId`);
-  stringAt(object.attemptId, `${path}.attemptId`);
-  validateSourceRef(object.sourceRef, `${path}.sourceRef`);
-  enumAt(object.verdict, MACHINE_VERDICTS, `${path}.verdict`);
-  const facts = arrayAt(object.facts, `${path}.facts`);
+function validateMachineFactSet(value, path) {
+  const facts = arrayAt(value, path);
   const factIds = new Set();
   facts.forEach((fact, index) => {
-    const factPath = `${path}.facts[${index}]`;
+    const factPath = `${path}[${index}]`;
     const item = exactKeys(
       fact,
       ["id", "kind", "statement", "status", "evidenceRefs"],
@@ -263,15 +251,49 @@ export function validateMachineResult(value, path = "machineResult") {
       fail(`${factPath}.evidenceRefs`, "VERIFIED facts require at least one evidence ref");
     }
   });
+  return facts;
+}
+
+function validatePassFactSet(value, path) {
+  const facts = validateMachineFactSet(value, path);
+  if (facts.length === 0) fail(path, "PASS-ENGINEERING requires at least one fact");
+  const contradictoryIndex = facts.findIndex((fact) => fact.status !== "VERIFIED");
+  if (contradictoryIndex >= 0) {
+    fail(
+      `${path}[${contradictoryIndex}].status`,
+      "PASS-ENGINEERING requires every fact status to be VERIFIED",
+    );
+  }
+  return facts;
+}
+
+function isPassFactSet(value, path) {
+  try {
+    validatePassFactSet(value, path);
+    return true;
+  } catch (error) {
+    if (error instanceof ContractError) return false;
+    throw error;
+  }
+}
+
+export function validateMachineResult(value, path = "machineResult") {
+  const object = exactKeys(
+    value,
+    ["schema", "resultId", "taskId", "attemptId", "sourceRef", "verdict", "facts", "limitations", "unresolved"],
+    ["schema", "resultId", "taskId", "attemptId", "sourceRef", "verdict", "facts", "limitations", "unresolved"],
+    path,
+  );
+  if (object.schema !== SCHEMAS.machineResult) fail(`${path}.schema`, `must equal ${SCHEMAS.machineResult}`);
+  stringAt(object.resultId, `${path}.resultId`);
+  stringAt(object.taskId, `${path}.taskId`);
+  stringAt(object.attemptId, `${path}.attemptId`);
+  validateSourceRef(object.sourceRef, `${path}.sourceRef`);
+  enumAt(object.verdict, MACHINE_VERDICTS, `${path}.verdict`);
   if (object.verdict === "PASS-ENGINEERING") {
-    if (facts.length === 0) fail(`${path}.facts`, "PASS-ENGINEERING requires at least one fact");
-    const contradictoryIndex = facts.findIndex((fact) => fact.status !== "VERIFIED");
-    if (contradictoryIndex >= 0) {
-      fail(
-        `${path}.facts[${contradictoryIndex}].status`,
-        "PASS-ENGINEERING requires every fact status to be VERIFIED",
-      );
-    }
+    validatePassFactSet(object.facts, `${path}.facts`);
+  } else {
+    validateMachineFactSet(object.facts, `${path}.facts`);
   }
   stringsAt(object.limitations, `${path}.limitations`);
   stringsAt(object.unresolved, `${path}.unresolved`);
@@ -511,10 +533,5 @@ export function deriveMachineVerdict({ authoritativeVerdict, claimedVerdict, fac
   if (claimedVerdict !== "PASS-ENGINEERING") return "INCOMPLETE";
 
   const factSet = arrayAt(facts, "facts");
-  const coherentVerifiedEvidence =
-    factSet.length > 0 &&
-    factSet.every(
-      (fact) => fact?.status === "VERIFIED" && Array.isArray(fact.evidenceRefs) && fact.evidenceRefs.length > 0,
-    );
-  return coherentVerifiedEvidence ? "PASS-ENGINEERING" : "INCOMPLETE";
+  return isPassFactSet(factSet, "facts") ? "PASS-ENGINEERING" : "INCOMPLETE";
 }

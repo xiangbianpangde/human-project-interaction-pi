@@ -3,14 +3,14 @@
 ## 0.5.0 - 2026-08-31
 
 - Preserve every `hpi/wire/execution/v1` byte and publish `hpi/wire/execution/v2` after an independent review blocked the 0.4 baseline; pin both interaction v1 and execution v1 digests in the v2 manifest.
-- Close erroneous PASS paths by matching Task/Evidence frozen identities as `id + revision + sha256`, rejecting duplicate Evidence/fact ids, requiring every Evidence `claim_refs` to name its exact fact, and requiring a non-empty all-VERIFIED fact set for PASS.
+- Close erroneous PASS paths by matching Task/Evidence frozen identities as `id + revision + sha256`, rejecting duplicate Evidence/fact ids, requiring every Evidence `claim_refs` to name its exact fact, and making verdict derivation and MachineResult validation share one non-empty, structurally valid, uniquely identified, all-VERIFIED fact-set contract.
 - Make Result replay classification ledger-wide and order-independent; pre-existing same-key or same-ID divergent revisions fail closed before candidate classification.
 - Require projector-owned `requestId + requestDigest + sourceDigest` binding before any human escalation; regex inspection remains defence-in-depth only.
 - Publish session outbox v2, bind each full candidate digest into its receipt, validate exact envelopes, quarantine malformed entries, and reject same-event-id divergent candidate digests deterministically instead of choosing by session order.
 - Reject duplicate normalized Pain/Design/Task/Result/Request ids before Brief and Trace construction.
 - Use strict RFC3339 execution timestamps and host-independent POSIX scoped paths; add Windows contract cases.
 - Bound Adapter authority reads to in-root regular non-symlink files of at most 2 MiB.
-- Add pinned-action GitHub CI for Linux Node 20/22 and Windows execution-contract tests; pin Pi 0.84.2 as an exact development dependency.
+- Add pinned-action GitHub CI for the Pi-compatible Node 22.19 floor/current Node 22 and Windows execution-contract tests; pin Pi 0.84.2 exactly and enforce LF checkout so frozen schema hashes are host-independent.
 - Keep TS-001 `NOT-RUN`, runtime intake, Result commit, full Reconciler, HumanResult intake, and canonical writing unchanged and unimplemented.
 
 ## 0.4.0 - 2026-08-30

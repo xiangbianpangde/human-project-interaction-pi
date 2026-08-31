@@ -5,7 +5,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 ## 当前版本与冻结边界
 
 - **TS-001 Adapter `ts001-pilot/0.1.0`**：冻结的自包含试点，只读本目录三份材料；机器状态保持 `NOT-RUN`。
-- **Package `0.5.0` candidate**：关闭两轮独立审核定位的 PASS provenance、幂等 ledger、Escalation Gate、恢复与路径合同缺口；保留 execution v1 历史字节并发布 `hpi/wire/execution/v2`。
+- **Package `0.5.0` candidate**：修复前三次独立审核定位的 PASS provenance/coherence、幂等 ledger、Escalation Gate、恢复与路径合同缺口；保留 execution v1 历史字节并发布 `hpi/wire/execution/v2`。
 - **完整 P0：未关闭**。详见 [FR-001～FR-024 覆盖矩阵](HPI_FR_coverage_matrix.md)。
 
 已实现的试点能力：
@@ -21,7 +21,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 - `hpi/wire/v1`：六类交互对象的 JSON Schema 2020-12、hash manifest 和 synthetic 正/负 fixtures；
 - 历史 `hpi/wire/execution/v1`：原始 0.4.0 set 的 schema、manifest、fixture 和 digest 原样保留；
 - 当前 `hpi/wire/execution/v2`：修正跨平台 scoped path，并锁定 interaction v1 + execution v1 的完整 digest；
-- 完整 frozen Evidence identity、`claim_refs ↔ fact_id`、全 VERIFIED PASS coherence、全 ledger 幂等、retry 和 stale preview；
+- 完整 frozen Evidence identity、`claim_refs ↔ fact_id`、唯一且结构完整的全 VERIFIED PASS fact set、全 ledger 幂等、retry 和 stale preview；
 - projector-owned EscalationRequest binding、candidate-digest-bound outbox v2、同 event ID divergent-content 冲突隔离、重复 logical ID 拒绝和有界 Adapter 读取；
 - 自动测试、GitHub CI、严格 Skill 校验和可逆链接安装。
 
@@ -89,14 +89,14 @@ talk/styles/hpi-project/              /talk html-js style pack
 tests/                                单元、wire fixtures、负向、恢复、loader、style、安装测试
 tests/integration/                    显式真实项目只读集成
 scripts/                              可逆安装与 Skill 校验入口
-.github/workflows/ci.yml               Linux Node 20/22 + Windows execution-contract CI
+.github/workflows/ci.yml               Linux Node 22.19/latest + Windows execution-contract CI
 ```
 
 安装使用符号链接，不复制 Skill、Extension 或 style，因此只有一份源树。
 
 ## 安装
 
-要求：Node.js 20+、Pi coding agent，以及现有 `/talk` extension。
+要求：Node.js 22.19+（与固定的 Pi `0.84.2` engine 一致）、Pi coding agent，以及现有 `/talk` extension。
 
 ```bash
 cd <HPI checkout>
@@ -176,7 +176,7 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 2. `sourceDigest` 必须等于 Adapter + canonical source snapshot 的摘要；
 3. 任一 schema byte、manifest hash、set dependency 或 trust-anchor digest 漂移时 fail closed；
 4. 外部 wire 只接受 snake_case，混合 camelCase 键拒绝；
-5. PASS facts 必须非空、全部 VERIFIED；Evidence 必须按完整 frozen identity 解析，`claim_refs` 包含精确 `fact_id`，并直接具备高信任状态；
+5. PASS facts 必须非空、fact id 唯一、结构完整且全部 VERIFIED；`deriveMachineVerdict` 与 MachineResult validator 使用同一 fact-set 合同；Evidence 必须按完整 frozen identity 解析，`claim_refs` 包含精确 `fact_id`，并直接具备高信任状态；
 6. execution record revision 必须匹配内容；classifier 先检查完整 existing ledger，排序不能改变 conflict 结果；
 7. retry 必须创建新 attempt 并保留旧 terminal record；上游 revision 只传播 `STALE` / `NEEDS_REVIEW` preview；
 8. 任意自然语言不能绕过 projector-owned request binding 变成人类问题；
@@ -185,4 +185,4 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 11. Adapter 不跟随 symlink、不读取非普通或超限权威输入；
 12. `NOT-RUN` 不得显示为 PASS；Machine 与 Human 状态不得合并；HPI 不写项目 canonical。
 
-GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.4.0 baseline `9b46061` 与首个 0.5 修复 commit `0fdaf17` 均被独立审核判定 BLOCK；当前 follow-up candidate 仍需新的独立复核与 CI 结果，不能据此宣称发布通过或完整 P0。
+GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.4.0 baseline `9b46061`、首个 0.5 修复 commit `0fdaf17` 与第二个候选 `b578cdf` 均被独立审核判定 BLOCK；当前 follow-up candidate 仍需新的独立复核与 CI 结果，不能据此宣称发布通过或完整 P0。

@@ -22,6 +22,14 @@ const sourceRef = Object.freeze({
   pointer: "09_TS001_测试与回滚验收.md",
 });
 
+const verifiedVerdictFact = Object.freeze({
+  id: "FACT-VERDICT-001",
+  kind: "TEST",
+  statement: "The authoritative acceptance test passed.",
+  status: "VERIFIED",
+  evidenceRefs: [sourceRef],
+});
+
 function escalation(overrides = {}) {
   return {
     schema: SCHEMAS.escalationRequest,
@@ -176,30 +184,35 @@ describe("source and machine contracts", () => {
     }
   });
 
-  it("requires authoritative PASS, a matching claim, and verified evidence for PASS-ENGINEERING", () => {
-    assert.equal(
-      deriveMachineVerdict({
-        authoritativeVerdict: "PASS-ENGINEERING",
-        claimedVerdict: "PASS-ENGINEERING",
-        facts: [{ status: "VERIFIED", evidenceRefs: [sourceRef] }],
-      }),
-      "PASS-ENGINEERING",
-    );
+  it("requires authoritative PASS and one valid, uniquely identified all-VERIFIED fact set", () => {
+    const secondVerifiedFact = {
+      ...verifiedVerdictFact,
+      id: "FACT-VERDICT-002",
+      statement: "A second authoritative acceptance test passed.",
+    };
+    for (const facts of [[verifiedVerdictFact], [verifiedVerdictFact, secondVerifiedFact]]) {
+      assert.equal(
+        deriveMachineVerdict({
+          authoritativeVerdict: "PASS-ENGINEERING",
+          claimedVerdict: "PASS-ENGINEERING",
+          facts,
+        }),
+        "PASS-ENGINEERING",
+      );
+    }
+
+    const { id: _missingId, ...unidentifiedFact } = verifiedVerdictFact;
     for (const facts of [
       [],
-      [{ status: "SELF_REPORTED", evidenceRefs: [] }],
-      [
-        { status: "VERIFIED", evidenceRefs: [sourceRef] },
-        { status: "FAILED", evidenceRefs: [] },
-      ],
-      [
-        { status: "VERIFIED", evidenceRefs: [sourceRef] },
-        { status: "NOT_RUN", evidenceRefs: [] },
-      ],
-      [
-        { status: "VERIFIED", evidenceRefs: [sourceRef] },
-        { status: "INCOMPLETE", evidenceRefs: [] },
-      ],
+      [{ ...verifiedVerdictFact, status: "SELF_REPORTED", evidenceRefs: [] }],
+      [verifiedVerdictFact, { ...secondVerifiedFact, status: "FAILED", evidenceRefs: [] }],
+      [verifiedVerdictFact, { ...secondVerifiedFact, status: "NOT_RUN", evidenceRefs: [] }],
+      [verifiedVerdictFact, { ...secondVerifiedFact, status: "INCOMPLETE", evidenceRefs: [] }],
+      [verifiedVerdictFact, { ...verifiedVerdictFact }],
+      [unidentifiedFact],
+      [{ ...verifiedVerdictFact, id: "" }],
+      [{ ...verifiedVerdictFact, evidenceRefs: [{}] }],
+      [{ ...verifiedVerdictFact, evidenceRefs: [{ ...sourceRef, sha256: "BAD" }] }],
     ]) {
       assert.equal(
         deriveMachineVerdict({
@@ -214,7 +227,7 @@ describe("source and machine contracts", () => {
       deriveMachineVerdict({
         authoritativeVerdict: "PASS-ENGINEERING",
         claimedVerdict: "INCOMPLETE",
-        facts: [{ status: "VERIFIED", evidenceRefs: [sourceRef] }],
+        facts: [verifiedVerdictFact],
       }),
       "INCOMPLETE",
     );

@@ -65,7 +65,7 @@ scope: HPI package 0.5.0 candidate; hpi/wire/v1 + preserved execution/v1 + curre
 
 | 问题 | 修复 | 负向证据 |
 |---|---|---|
-| 单个 VERIFIED fact 掩盖 FAILED/NOT_RUN/INCOMPLETE/SELF_REPORTED 可升为 PASS | `deriveMachineVerdict` 与 MachineResult companion contract 要求非空且全部 VERIFIED；任何矛盾状态保持/降为 INCOMPLETE | `tests/contracts.test.mjs` 覆盖四类 mixed-status 与空 facts；execution test 覆盖 codec 和 v2 schema |
+| 单个 VERIFIED fact 掩盖 FAILED/NOT_RUN/INCOMPLETE/SELF_REPORTED，或重复/无身份 fact 可升为 PASS | `deriveMachineVerdict` 与 MachineResult companion validator 共享非空、结构完整、fact id 唯一且全部 VERIFIED 的 fact-set 合同；任一不一致保持/降为 INCOMPLETE | `tests/contracts.test.mjs` 覆盖四类 mixed-status、空、重复/缺失 id 与 malformed Evidence ref；execution test 覆盖 derivation、validator、interaction/execution codec 和 v2 schema |
 | 伪造 `sourceDigest` 可通过 | digest 必须等于 `sha256({adapter, canonical sourceSnapshot})` | `tests/adapter-contract.test.mjs`、`tests/projector.test.mjs` |
 | 安装器忽略 Pi 正式配置变量 | 优先级改为 HPI override → `PI_CODING_AGENT_DIR` → legacy `PI_AGENT_DIR` → default | `tests/install.test.mjs` |
 | 测试固定 Homebrew loader 路径 | 从 `pi` executable、`PI_PACKAGE_DIR` 或显式 override 定位 package root | `src/pi-paths.mjs` 与安装/Extension 测试 |

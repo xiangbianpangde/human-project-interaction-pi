@@ -12,6 +12,8 @@ const manifest = JSON.parse(read("talk/styles/hpi-project/manifest.json"));
 const executionV1Manifest = JSON.parse(read("schemas/execution-v1/manifest.v1.json"));
 const executionV2Manifest = JSON.parse(read("schemas/execution-v2/manifest.v2.json"));
 const packageJson = JSON.parse(read("package.json"));
+const ci = read(".github/workflows/ci.yml");
+const gitAttributes = read(".gitattributes");
 
 describe("implementation documentation", () => {
   it("maps every FR-001 through FR-024 exactly once with bounded statuses", () => {
@@ -47,6 +49,13 @@ describe("implementation documentation", () => {
     );
     assert.match(skill, /version: "0\.5\.0"/u);
     assert.match(changelog, /^## 0\.5\.0 - 2026-08-31$/mu);
+  });
+
+  it("aligns the Node floor and cross-platform checkout with the pinned Pi runtime", () => {
+    assert.equal(packageJson.engines.node, ">=22.19.0");
+    assert.match(ci, /node: \[22\.19\.0, 22\.x\]/u);
+    assert.doesNotMatch(ci, /20\.x/u);
+    assert.match(gitAttributes, /^\* text=auto eol=lf$/mu);
   });
 
   it("freezes the pilot boundary and contains no machine-specific install path", () => {
