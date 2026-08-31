@@ -67,7 +67,7 @@ test("real R-ICL Adapter → projection → Extension query remains read-only", 
   assert.equal(status.details.data.adapter, "ricl-v4-readonly/0.1.0");
   assert.equal(status.details.data.wireSchemaSet, "hpi/wire/v1");
   assert.match(status.details.data.wireSchemaSetDigest, /^[a-f0-9]{64}$/);
-  assert.equal(status.details.data.executionWireSchemaSet, "hpi/wire/execution/v1");
+  assert.equal(status.details.data.executionWireSchemaSet, "hpi/wire/execution/v2");
   assert.match(status.details.data.executionWireSchemaSetDigest, /^[a-f0-9]{64}$/);
   assert.equal(status.details.data.boundaries.executionRuntimeIntake, "NOT_IMPLEMENTED");
   assert.equal(status.details.data.wireNaming, "snake_case");
@@ -75,11 +75,11 @@ test("real R-ICL Adapter → projection → Extension query remains read-only", 
   assert.equal(status.details.data.hps.activeWork[0].humanStatus, "NOT_NEEDED");
   assert.match(brief.details.data.talkContent.project.title, /R-ICL v4\.0/);
   assert.equal(brief.details.data.wireContract.schemaSet, "hpi/wire/v1");
-  assert.equal(brief.details.data.executionWireContract.schemaSet, "hpi/wire/execution/v1");
+  assert.equal(brief.details.data.executionWireContract.schemaSet, "hpi/wire/execution/v2");
   assert.equal(brief.details.data.talkContent.decision, null);
   assert.equal(wire.details.data.schema_set, "hpi/wire/v1");
   assert.equal(wire.details.data.inbound_runtime, "NOT_IMPLEMENTED");
-  assert.equal(wire.details.data.execution_contract.schema_set, "hpi/wire/execution/v1");
+  assert.equal(wire.details.data.execution_contract.schema_set, "hpi/wire/execution/v2");
   assert.equal(wire.details.data.execution_contract.runtime_intake, "NOT_IMPLEMENTED");
   assert.equal(wire.details.data.execution_contract.available_project_objects, 0);
   assert.ok(wire.details.data.objects.some((object) => object.schema === "hpi/wire/hps/v1"));

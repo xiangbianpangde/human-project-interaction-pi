@@ -9,8 +9,11 @@ const readme = read("README.md");
 const changelog = read("CHANGELOG.md");
 const skill = read("skills/task/human-project-interaction/SKILL.md");
 const manifest = JSON.parse(read("talk/styles/hpi-project/manifest.json"));
-const executionManifest = JSON.parse(read("schemas/execution-v1/manifest.v1.json"));
+const executionV1Manifest = JSON.parse(read("schemas/execution-v1/manifest.v1.json"));
+const executionV2Manifest = JSON.parse(read("schemas/execution-v2/manifest.v2.json"));
 const packageJson = JSON.parse(read("package.json"));
+const ci = read(".github/workflows/ci.yml");
+const gitAttributes = read(".gitattributes");
 
 describe("implementation documentation", () => {
   it("maps every FR-001 through FR-024 exactly once with bounded statuses", () => {
@@ -33,13 +36,26 @@ describe("implementation documentation", () => {
     assert.match(prd, /\| E12 \| 英国政府/u);
   });
 
-  it("tracks package, Skill, and independently versioned style releases", () => {
-    assert.equal(packageJson.version, "0.4.0");
+  it("tracks package, Skill, independently versioned style, and execution lineage releases", () => {
+    assert.equal(packageJson.version, "0.5.0");
     assert.equal(manifest.version, "0.2.0");
-    assert.equal(executionManifest.schema_set, "hpi/wire/execution/v1");
-    assert.equal(executionManifest.dependencies[0].schema_set, "hpi/wire/v1");
-    assert.match(skill, /version: "0\.4\.0"/u);
-    assert.match(changelog, /^## 0\.4\.0 - 2026-08-30$/mu);
+    assert.equal(executionV1Manifest.schema_set, "hpi/wire/execution/v1");
+    assert.equal(executionV1Manifest.schema_set_digest, "450698c6e3218b3419f081dc47576f94edaea36ee0da6a97b35c80ef6d9e88d1");
+    assert.equal(executionV1Manifest.dependencies[0].schema_set, "hpi/wire/v1");
+    assert.equal(executionV2Manifest.schema_set, "hpi/wire/execution/v2");
+    assert.deepEqual(
+      executionV2Manifest.dependencies.map((dependency) => dependency.schema_set),
+      ["hpi/wire/v1", "hpi/wire/execution/v1"],
+    );
+    assert.match(skill, /version: "0\.5\.0"/u);
+    assert.match(changelog, /^## 0\.5\.0 - 2026-08-31$/mu);
+  });
+
+  it("aligns the Node floor and cross-platform checkout with the pinned Pi runtime", () => {
+    assert.equal(packageJson.engines.node, ">=22.19.0");
+    assert.match(ci, /node: \[22\.19\.0, 22\.x\]/u);
+    assert.doesNotMatch(ci, /20\.x/u);
+    assert.match(gitAttributes, /^\* text=auto eol=lf$/mu);
   });
 
   it("freezes the pilot boundary and contains no machine-specific install path", () => {
@@ -48,9 +64,11 @@ describe("implementation documentation", () => {
     assert.match(readme, /PI_CODING_AGENT_DIR/u);
     assert.match(readme, /hpi\/wire\/v1/u);
     assert.match(readme, /hpi\/wire\/execution\/v1/u);
+    assert.match(readme, /hpi\/wire\/execution\/v2/u);
     assert.match(readme, /snake_case-only/u);
-    assert.match(readme, /Inbound runtime 仍是 `not_implemented`/u);
+    assert.match(readme, /Inbound runtime.*`not_implemented`/u);
     assert.match(readme, /execution lifecycle 只做无副作用/u);
+    assert.match(readme, /projector-owned/u);
     assert.doesNotMatch(readme, /\/Users\/xbpd\/Projects\/交互skills|\/opt\/homebrew/u);
   });
 });

@@ -5,7 +5,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 ## 当前版本与冻结边界
 
 - **TS-001 Adapter `ts001-pilot/0.1.0`**：冻结的自包含试点，只读本目录三份材料；机器状态保持 `NOT-RUN`。
-- **Package `0.4.0`**：在 0.3 的只读交互合同基础上，新增独立且依赖锁定的 `hpi/wire/execution/v1`，并提供纯 revision/idempotency/retry/stale preview。
+- **Package `0.5.0` candidate**：修复前三次独立审核定位的 PASS provenance/coherence、幂等 ledger、Escalation Gate、恢复与路径合同缺口；保留 execution v1 历史字节并发布 `hpi/wire/execution/v2`。
 - **完整 P0：未关闭**。详见 [FR-001～FR-024 覆盖矩阵](HPI_FR_coverage_matrix.md)。
 
 已实现的试点能力：
@@ -19,9 +19,11 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 - `hpi-project` `/talk` style，含 L0–L4 渐进披露和事件回传；
 - TS-001 与 R-ICL v4 两个只读 Adapter；
 - `hpi/wire/v1`：六类交互对象的 JSON Schema 2020-12、hash manifest 和 synthetic 正/负 fixtures；
-- `hpi/wire/execution/v1`：TaskSlice、HandoffBundle、Attempt、Evidence、ResultBundle、StaleReport 的独立冻结 set；
-- 内容 revision、跨对象绑定、幂等 replay、retry 新 attempt 和保守 stale propagation 的纯函数；
-- 自动测试、严格 Skill 校验和可逆链接安装。
+- 历史 `hpi/wire/execution/v1`：原始 0.4.0 set 的 schema、manifest、fixture 和 digest 原样保留；
+- 当前 `hpi/wire/execution/v2`：修正跨平台 scoped path，并锁定 interaction v1 + execution v1 的完整 digest；
+- 完整 frozen Evidence identity、`claim_refs ↔ fact_id`、唯一且结构完整的全 VERIFIED PASS fact set、全 ledger 幂等、retry 和 stale preview；
+- projector-owned EscalationRequest binding、candidate-digest-bound outbox v2、同 event ID divergent-content 冲突隔离、重复 logical ID 拒绝和有界 Adapter 读取；
+- 自动测试、GitHub CI、严格 Skill 校验和可逆链接安装。
 
 明确未实现：
 
@@ -34,14 +36,15 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 - 从按钮、自然语言或 CandidateEvent 自动生成 HumanResult；
 - TS-001 工程测试执行或 PASS 裁决。
 
-外部合同使用 **snake_case-only**，并分别冻结为两个不可原地修改的 set：
+外部合同使用 **snake_case-only**，并保留完整版本链：
 
-1. `hpi/wire/v1`：HPS、MachineResult、HumanResult、HumanBrief、EscalationRequest、TraceLink；digest `1d08d1ac…264725`。
-2. `hpi/wire/execution/v1`：TaskSlice、HandoffBundle、Attempt、Evidence、ResultBundle、StaleReport；digest `450698c6…9e88d1`，且 manifest 锁定前一 set 的完整 digest。
+1. `hpi/wire/v1`：交互对象；digest `1d08d1ac…264725`。
+2. `hpi/wire/execution/v1`：0.4.0 历史执行合同；digest `450698c6…9e88d1`，保持不可修改。
+3. `hpi/wire/execution/v2`：当前执行合同；digest `bccb3739…36439c`，manifest 同时锁定上述两个祖先 digest。
 
-当前 JavaScript camelCase 对象只是内部实现 profile，只能通过 `src/wire.mjs` / `src/execution.mjs` 的显式单向 codec 导出。混合键被拒绝；schema bytes、依赖摘要与集合摘要由两个 manifest 和代码 trust anchor 固定。
+v2 没有原地修补 v1。它修正 host-independent scoped path，并由 companion codec 强制 Evidence/Task 的 `id + revision + sha256` 精确闭合。每条 Evidence ref 的 `claim_refs` 必须包含引用它的 `fact_id`；`PASS-ENGINEERING` 要求非空且全部为 VERIFIED 的事实集，每个事实都直接引用高信任 Evidence。全 ledger 在 replay 分类前检查既存 same-key/same-ID divergent revisions，结果不再依赖数组顺序。
 
-两个 manifest 的 Inbound runtime 仍是 `not_implemented`。execution lifecycle 只做无副作用的 schema/内容 revision 校验、Result replay 分类、retry candidate 和 stale preview；它不会 dispatch Agent、append event、commit Result、修改下游状态或写 canonical。成功路径采用无环顺序：ResultBundle 先引用冻结的 `RUNNING` Attempt snapshot，随后 terminal Attempt 新 revision 才以 `supersedes` + `terminal_result_ref` 回指。schema/纯函数通过不等于真实 ResultBundle 已执行、HumanResult 可写、完整 Reconciler 已存在或完整 P0 已关闭。
+当前 JavaScript camelCase 对象只是内部实现 profile，只能通过 `src/wire.mjs` / `src/execution.mjs` 的显式单向 codec 导出。所有 manifest 的 Inbound runtime 仍是 `not_implemented`。execution lifecycle 只做无副作用的 schema/内容 revision 校验、Result replay 分类、retry candidate 和 stale preview；它不会 dispatch Agent、append event、commit Result、修改下游状态或写 canonical。成功路径仍采用无环顺序：ResultBundle 先引用冻结的 `RUNNING` Attempt snapshot，随后 terminal Attempt 新 revision 才以 `supersedes` + `terminal_result_ref` 回指。
 
 ## Adapter 权威边界
 
@@ -53,7 +56,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 - `human-project-interaction-skills-technical-design.md`
 - `09_TS001_测试与回滚验收.md`
 
-合同权威状态仍是 `test_status: NOT-RUN`。`117/117`、hash 或 Schema 描述最多为 `SELF_REPORTED`。
+合同权威状态仍是 `test_status: NOT-RUN`。`117/117`、hash 或 Schema 描述最多为 `SELF_REPORTED`。Adapter 只读普通文件、拒绝 symlink/非普通文件/越界 realpath，并对每个权威输入施加 2 MiB 上限。
 
 ### R-ICL v4 真实项目
 
@@ -71,13 +74,14 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 
 ```text
 src/                                  确定性合同、投影、Gate、session outbox
-src/adapters/                         Adapter contract、registry、R-ICL 实现
+src/adapters/                         Adapter contract、registry、有界权威文件读取、R-ICL 实现
 src/wire.mjs                           interaction camelCase → snake_case codec
 src/execution.mjs                      execution 公共 facade
 src/execution/                         contract、codecs、retry/replay/stale 纯函数
-src/wire-schema.mjs                    两个 schema manifest/hash/dependency fail-closed loader
+src/wire-schema.mjs                    schema lineage manifest/hash/dependency fail-closed loader
 schemas/                               冻结的 hpi/wire/v1 JSON Schema 与 manifest
-schemas/execution-v1/                  冻结的 hpi/wire/execution/v1 与独立 manifest
+schemas/execution-v1/                  保留的 hpi/wire/execution/v1 历史合同
+schemas/execution-v2/                  当前 hpi/wire/execution/v2 合同与 manifest
 extension/hpi/index.ts                Pi Extension
 index.ts                              安装后的 package entry
 skills/task/human-project-interaction/ task-layer Skill
@@ -85,13 +89,14 @@ talk/styles/hpi-project/              /talk html-js style pack
 tests/                                单元、wire fixtures、负向、恢复、loader、style、安装测试
 tests/integration/                    显式真实项目只读集成
 scripts/                              可逆安装与 Skill 校验入口
+.github/workflows/ci.yml               Linux Node 22.19/latest + Windows execution-contract CI
 ```
 
 安装使用符号链接，不复制 Skill、Extension 或 style，因此只有一份源树。
 
 ## 安装
 
-要求：Node.js 20+、Pi coding agent，以及现有 `/talk` extension。
+要求：Node.js 22.19+（与固定的 Pi `0.84.2` engine 一致）、Pi coding agent，以及现有 `/talk` extension。
 
 ```bash
 cd <HPI checkout>
@@ -135,7 +140,9 @@ npm run link:uninstall
 /hpi verify
 ```
 
-`/hpi` 路由到 Skill。Skill 将 `hpi_query(op="brief")` 返回的 `talkContentJson` 原样交给 `talk_render(styleId="hpi-project")`。`/hpi wire [id]` 直接返回只读 interaction wire objects，并附 execution set/digest、`available_project_objects: 0` 与 runtime/writer 边界；它不启动 Agent turn，也不接受 inbound 数据。`talk_poll_events` 返回的 HPI 事件必须完整传给 `hpi_propose(op="ingest_talk_event")`。
+`/hpi` 路由到 Skill。Skill 将 `hpi_query(op="brief")` 返回的 `talkContentJson` 原样交给 `talk_render(styleId="hpi-project")`。`/hpi wire [id]` 直接返回只读 interaction wire objects，并附当前 execution v2 set/digest、祖先依赖、`available_project_objects: 0` 与 runtime/writer 边界；它不启动 Agent turn，也不接受 inbound 数据。
+
+`hpi_propose(op="escalation")` 不再从任意自然语言 mint HumanEscalationRequest。候选必须绑定 projector 当前产生的 `requestId + requestDigest + sourceDigest`；regex 仅作为额外机器事实拒绝层。`talk_poll_events` 返回的 HPI 事件仍必须完整传给 `hpi_propose(op="ingest_talk_event")`。
 
 合法决策点击最多产生：
 
@@ -169,13 +176,13 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 2. `sourceDigest` 必须等于 Adapter + canonical source snapshot 的摘要；
 3. 任一 schema byte、manifest hash、set dependency 或 trust-anchor digest 漂移时 fail closed；
 4. 外部 wire 只接受 snake_case，混合 camelCase 键拒绝；
-5. execution record revision 必须匹配内容；同幂等键的变体冲突，不产生第二次 commit；
-6. retry 必须创建新 attempt 并保留旧 terminal record；上游 revision 只传播 `STALE` / `NEEDS_REVIEW` preview；
-7. `NOT-RUN` 不得显示为 PASS；
-8. 机器事实信任题不得产生人类候选；
-9. Machine 与 Human 状态不得合并为 overall status；
-10. 来源变化后旧候选必须 stale；
-11. `/talk` 导航只读，决策按钮只生成 session candidate；
-12. HPI 不写项目 canonical。
+5. PASS facts 必须非空、fact id 唯一、结构完整且全部 VERIFIED；`deriveMachineVerdict` 与 MachineResult validator 使用同一 fact-set 合同；Evidence 必须按完整 frozen identity 解析，`claim_refs` 包含精确 `fact_id`，并直接具备高信任状态；
+6. execution record revision 必须匹配内容；classifier 先检查完整 existing ledger，排序不能改变 conflict 结果；
+7. retry 必须创建新 attempt 并保留旧 terminal record；上游 revision 只传播 `STALE` / `NEEDS_REVIEW` preview；
+8. 任意自然语言不能绕过 projector-owned request binding 变成人类问题；
+9. outbox v2 将完整 candidate digest 绑定到 receipt；同 `eventId` 不同 digest 产生确定性 `CANDIDATE_IDENTITY_CONFLICT` 且不恢复任一候选；malformed entry 只隔离单条；
+10. scoped path 跨平台 fail closed，timestamp codec 成功的对象必须通过 frozen schema；
+11. Adapter 不跟随 symlink、不读取非普通或超限权威输入；
+12. `NOT-RUN` 不得显示为 PASS；Machine 与 Human 状态不得合并；HPI 不写项目 canonical。
 
-本目录当前没有 Git 元数据。本实现没有执行 `git init`；建立版本基线仍需单独明确授权。
+GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.4.0 baseline `9b46061`、首个 0.5 修复 commit `0fdaf17` 与第二个候选 `b578cdf` 均被独立审核判定 BLOCK；当前 follow-up candidate 仍需新的独立复核与 CI 结果，不能据此宣称发布通过或完整 P0。

@@ -17,7 +17,19 @@ const request = projection.escalationRequests[0];
 const context = {
   machineStatus: projection.hps.activeWork[0].machineStatus,
   sourceDigest: projection.sourceDigest,
+  trustedRequests: projection.escalationRequests,
 };
+
+function requestBinding(overrides = {}) {
+  return {
+    projectId: projection.projectId,
+    category: request.category,
+    requestId: request.requestId,
+    requestDigest: request.requestDigest,
+    sourceDigest: projection.sourceDigest,
+    ...overrides,
+  };
+}
 
 function talkEvent(type, payload = {}, id = "evt-001") {
   return {
@@ -93,16 +105,10 @@ describe("Human Escalation Gate", () => {
 
   it("accepts one narrow design decision and computes its digest", () => {
     const result = evaluateEscalation(
-      {
-        projectId: projection.projectId,
-        category: request.category,
+      requestBinding({
         decisionUnit: request.decisionUnit,
         question: request.question,
-        facts: request.facts,
-        options: request.options,
-        recommendation: request.recommendation,
-        affectedRefs: request.affectedRefs,
-      },
+      }),
       context,
     );
     assert.equal(result.kind, "HUMAN_DECISION_REQUIRED");
@@ -111,24 +117,58 @@ describe("Human Escalation Gate", () => {
     assert.equal(result.request.oneQuestion, true);
   });
 
-  it("rejects a compound human question", () => {
-    assert.throws(
-      () =>
-        evaluateEscalation(
-          {
-            projectId: projection.projectId,
-            category: request.category,
-            decisionUnit: request.decisionUnit,
-            question: "是否接受设计？是否批准范围？",
-            facts: request.facts,
-            options: request.options,
-            recommendation: request.recommendation,
-            affectedRefs: request.affectedRefs,
-          },
-          context,
-        ),
-      /exactly one question mark/,
+  it("rejects tampered human questions instead of minting a new request", () => {
+    const result = evaluateEscalation(
+      requestBinding({
+        decisionUnit: request.decisionUnit,
+        question: "是否接受设计？是否批准范围？",
+      }),
+      context,
     );
+    assert.equal(result.kind, "UNTRUSTED_ESCALATION_REJECTED");
+    assert.equal(result.humanEscalation, null);
+    assert.match(result.reason, /differs from the bound escalation request/);
+  });
+
+  it("rejects machine-fact paraphrases mislabeled as human categories", () => {
+    for (const question of [
+      "foo 文件在吗？",
+      "这个引用能打开吗？",
+      "schema 能解析？",
+      "这些测试现在是绿的吗？",
+      "哈希一样吗？",
+      "有没有写到项目目录之外？",
+      "有访问网络吗？",
+      "Is foo.json present in the workspace?",
+    ]) {
+      const result = evaluateEscalation(
+        {
+          projectId: projection.projectId,
+          category: "DESIGN",
+          decisionUnit: "spoofed-machine-fact",
+          question,
+          sourceDigest: projection.sourceDigest,
+        },
+        context,
+      );
+      assert.ok(
+        ["NOT_RUN", "MACHINE_FACT_REJECTED", "UNTRUSTED_ESCALATION_REJECTED"].includes(result.kind),
+        `${question}: ${result.kind}`,
+      );
+      assert.equal(result.humanEscalation, null);
+    }
+  });
+
+  it("rejects stale or missing projector request bindings", () => {
+    for (const binding of [
+      requestBinding({ requestDigest: "0".repeat(64) }),
+      requestBinding({ sourceDigest: "0".repeat(64) }),
+      requestBinding({ requestId: "ER-UNKNOWN" }),
+    ]) {
+      const result = evaluateEscalation(binding, context);
+      assert.equal(result.kind, "UNTRUSTED_ESCALATION_REJECTED");
+      assert.equal(result.humanEscalation, null);
+    }
   });
 });
 

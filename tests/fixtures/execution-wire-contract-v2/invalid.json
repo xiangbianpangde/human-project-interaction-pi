@@ -1,0 +1,373 @@
+{
+  "schema_set": "hpi/wire/execution/v2",
+  "fixture_authority": "SYNTHETIC_TEST_ONLY_NOT_PROJECT_CANONICAL",
+  "cases": [
+    {
+      "name": "TaskSlice rejects a camelCase root key",
+      "schema": "task_slice",
+      "base": "task_slice",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "taskId"
+          ],
+          "value": "TS-CAMEL"
+        }
+      ],
+      "expected_keyword": "additionalProperties",
+      "expected_path": ""
+    },
+    {
+      "name": "TaskSlice requires a Pain Requirement or Design revision",
+      "schema": "task_slice",
+      "base": "task_slice",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "pain_refs"
+          ],
+          "value": []
+        }
+      ],
+      "expected_keyword": "anyOf",
+      "expected_path": ""
+    },
+    {
+      "name": "permission paths must remain project relative",
+      "schema": "task_slice",
+      "base": "task_slice",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "permission_scope",
+            "allowed_paths",
+            0
+          ],
+          "value": "/etc/passwd"
+        }
+      ],
+      "expected_keyword": "pattern",
+      "expected_path": "/permission_scope/allowed_paths/0"
+    },
+    {
+      "name": "network DENY cannot carry an allowed host",
+      "schema": "handoff_bundle",
+      "base": "handoff_bundle",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "permission_scope",
+            "network",
+            "allowed_hosts"
+          ],
+          "value": [
+            "example.com"
+          ]
+        }
+      ],
+      "expected_keyword": "maxItems",
+      "expected_path": "/permission_scope/network/allowed_hosts"
+    },
+    {
+      "name": "Handoff context summary cannot become authoritative",
+      "schema": "handoff_bundle",
+      "base": "handoff_bundle",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "context_summary",
+            "authoritative"
+          ],
+          "value": true
+        }
+      ],
+      "expected_keyword": "const",
+      "expected_path": "/context_summary/authoritative"
+    },
+    {
+      "name": "retry ordinal requires retry_of",
+      "schema": "attempt",
+      "base": "attempt",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "ordinal"
+          ],
+          "value": 2
+        }
+      ],
+      "expected_keyword": "required",
+      "expected_path": ""
+    },
+    {
+      "name": "independently validated evidence requires a validator",
+      "schema": "evidence",
+      "base": "evidence",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "status"
+          ],
+          "value": "INDEPENDENTLY_VALIDATED"
+        }
+      ],
+      "expected_keyword": "minItems",
+      "expected_path": "/verified_by"
+    },
+    {
+      "name": "self reported evidence cannot list verifiers",
+      "schema": "evidence",
+      "base": "evidence",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "status"
+          ],
+          "value": "SELF_REPORTED"
+        },
+        {
+          "op": "set",
+          "path": [
+            "verified_by"
+          ],
+          "value": [
+            {
+              "agent_id": "agent-validation",
+              "role": "VALIDATION",
+              "harness_revision": "harness/fixture"
+            }
+          ]
+        }
+      ],
+      "expected_keyword": "maxItems",
+      "expected_path": "/verified_by"
+    },
+    {
+      "name": "PASS ResultBundle needs verified execution evidence",
+      "schema": "result_bundle",
+      "base": "result_bundle",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "machine_result",
+            "verdict"
+          ],
+          "value": "PASS-ENGINEERING"
+        },
+        {
+          "op": "set",
+          "path": [
+            "machine_result",
+            "facts",
+            0,
+            "status"
+          ],
+          "value": "VERIFIED"
+        }
+      ],
+      "expected_keyword": "contains",
+      "expected_path": "/evidence"
+    },
+    {
+      "name": "ResultBundle cannot claim canonical authority",
+      "schema": "result_bundle",
+      "base": "result_bundle",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "submission_authority"
+          ],
+          "value": "COMMITTED"
+        }
+      ],
+      "expected_keyword": "const",
+      "expected_path": "/submission_authority"
+    },
+    {
+      "name": "stale preview cannot automatically invalidate a target",
+      "schema": "stale_report",
+      "base": "stale_report",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "effects",
+            0,
+            "automatic_invalidation"
+          ],
+          "value": true
+        }
+      ],
+      "expected_keyword": "const",
+      "expected_path": "/effects/0/automatic_invalidation"
+    },
+    {
+      "name": "stale disposition is closed",
+      "schema": "stale_report",
+      "base": "stale_report",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "effects",
+            0,
+            "disposition"
+          ],
+          "value": "FALSE"
+        }
+      ],
+      "expected_keyword": "enum",
+      "expected_path": "/effects/0/disposition"
+    },
+    {
+      "name": "frozen inputs require a SHA",
+      "schema": "task_slice",
+      "base": "task_slice",
+      "operations": [
+        {
+          "op": "delete",
+          "path": [
+            "input_refs",
+            0,
+            "sha256"
+          ]
+        }
+      ],
+      "expected_keyword": "required",
+      "expected_path": "/input_refs/0"
+    },
+    {
+      "name": "nested Agent keys are snake_case only",
+      "schema": "handoff_bundle",
+      "base": "handoff_bundle",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "sender",
+            "agentId"
+          ],
+          "value": "agent-camel"
+        }
+      ],
+      "expected_keyword": "additionalProperties",
+      "expected_path": "/sender"
+    },
+    {
+      "name": "embedded Evidence rejects mixed revision naming",
+      "schema": "result_bundle",
+      "base": "result_bundle",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "evidence",
+            0,
+            "evidenceRevision"
+          ],
+          "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "expected_keyword": "additionalProperties",
+      "expected_path": "/evidence/0"
+    },
+    {
+      "name": "v2 rejects Windows drive paths",
+      "schema": "task_slice",
+      "base": "task_slice",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "permission_scope",
+            "allowed_paths",
+            0
+          ],
+          "value": "C:\\Windows\\System32"
+        }
+      ],
+      "expected_keyword": "pattern",
+      "expected_path": "/permission_scope/allowed_paths/0"
+    },
+    {
+      "name": "v2 rejects backslash traversal",
+      "schema": "task_slice",
+      "base": "task_slice",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "permission_scope",
+            "allowed_paths",
+            0
+          ],
+          "value": "..\\secret"
+        }
+      ],
+      "expected_keyword": "pattern",
+      "expected_path": "/permission_scope/allowed_paths/0"
+    },
+    {
+      "name": "v2 rejects leading parent traversal",
+      "schema": "task_slice",
+      "base": "task_slice",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "permission_scope",
+            "allowed_paths",
+            0
+          ],
+          "value": "../secret"
+        }
+      ],
+      "expected_keyword": "pattern",
+      "expected_path": "/permission_scope/allowed_paths/0"
+    },
+    {
+      "name": "v2 rejects a leading dot segment",
+      "schema": "task_slice",
+      "base": "task_slice",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "permission_scope",
+            "allowed_paths",
+            0
+          ],
+          "value": "./local"
+        }
+      ],
+      "expected_keyword": "pattern",
+      "expected_path": "/permission_scope/allowed_paths/0"
+    },
+    {
+      "name": "v2 rejects date-only timestamps",
+      "schema": "task_slice",
+      "base": "task_slice",
+      "operations": [
+        {
+          "op": "set",
+          "path": [
+            "created_at"
+          ],
+          "value": "2026-08-30"
+        }
+      ],
+      "expected_keyword": "format",
+      "expected_path": "/created_at"
+    }
+  ]
+}

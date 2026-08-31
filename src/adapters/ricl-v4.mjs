@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-
 import { SCHEMAS, deriveMachineVerdict, validateMachineResult } from "../contracts.mjs";
+import {
+  inspectAuthoritativeFiles,
+  readAuthoritativeFiles,
+} from "./authoritative-files.mjs";
 import {
   NORMALIZED_SOURCE_SCHEMA,
   computeSourceDigest,
@@ -288,19 +289,15 @@ export function normalizeRiclV4({ texts }) {
 }
 
 export function detectRiclV4(projectRoot) {
-  const root = resolve(projectRoot);
-  const paths = Object.fromEntries(
-    Object.entries(RICL_V4_FILES).map(([key, pointer]) => [key, join(root, pointer)]),
-  );
-  const missing = Object.entries(paths)
-    .filter(([, path]) => !existsSync(path))
-    .map(([key]) => RICL_V4_FILES[key]);
+  const inspected = inspectAuthoritativeFiles(projectRoot, RICL_V4_FILES);
   return {
-    available: missing.length === 0,
-    root,
-    paths,
-    missing,
+    ...inspected,
     adapter: RICL_V4_ADAPTER_VERSION,
+    reason: inspected.available
+      ? undefined
+      : inspected.unsafe.length > 0
+        ? "R-ICL v4 authority file set is unsafe"
+        : "R-ICL v4 authority file set is incomplete",
   };
 }
 
@@ -310,10 +307,16 @@ export function loadRiclV4(projectRoot) {
     throw new RiclAdapterError("R-ICL v4 read-only adapter is unavailable", {
       projectRoot: detected.root,
       missing: detected.missing,
+      unsafe: detected.unsafe,
     });
   }
-  const texts = Object.fromEntries(
-    Object.entries(detected.paths).map(([key, path]) => [key, readFileSync(path, "utf8")]),
-  );
+  let texts;
+  try {
+    texts = readAuthoritativeFiles(projectRoot, RICL_V4_FILES);
+  } catch (error) {
+    throw new RiclAdapterError("R-ICL v4 authority files changed or became unsafe while reading", {
+      cause: error,
+    });
+  }
   return normalizeRiclV4({ texts });
 }

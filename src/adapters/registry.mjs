@@ -38,7 +38,28 @@ export function listProjectAdapters() {
 
 export function detectProjectAdapter(projectRoot) {
   const root = resolve(projectRoot);
-  const detections = ADAPTERS.map((adapter) => ({ adapter, result: adapter.detect(root) }));
+  const detections = ADAPTERS.map((adapter) => {
+    try {
+      return { adapter, result: adapter.detect(root) };
+    } catch (error) {
+      return {
+        adapter,
+        result: {
+          available: false,
+          root,
+          paths: {},
+          missing: [],
+          unsafe: [
+            {
+              pointer: root,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          ],
+          reason: `adapter detection failed closed: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      };
+    }
+  });
   const available = detections.filter((entry) => entry.result.available);
   if (available.length === 1) {
     return {
@@ -63,9 +84,12 @@ export function detectProjectAdapter(projectRoot) {
     available: false,
     root,
     adapter: undefined,
-    missing: detections.flatMap((entry) =>
-      entry.result.missing.map((pointer) => `${entry.adapter.id}:${pointer}`),
-    ),
+    missing: detections.flatMap((entry) => [
+      ...entry.result.missing.map((pointer) => `${entry.adapter.id}:${pointer}`),
+      ...(entry.result.unsafe ?? []).map(
+        (unsafe) => `${entry.adapter.id}:unsafe:${unsafe.pointer}:${unsafe.error}`,
+      ),
+    ]),
     reason: "no supported HPI adapter",
     supportedAdapters: listProjectAdapters(),
     detections: detections.map((entry) => entry.result),

@@ -229,6 +229,54 @@ export function validateSourceRef(value, path = "sourceRef") {
   return value;
 }
 
+function validateMachineFactSet(value, path) {
+  const facts = arrayAt(value, path);
+  const factIds = new Set();
+  facts.forEach((fact, index) => {
+    const factPath = `${path}[${index}]`;
+    const item = exactKeys(
+      fact,
+      ["id", "kind", "statement", "status", "evidenceRefs"],
+      ["id", "kind", "statement", "status", "evidenceRefs"],
+      factPath,
+    );
+    stringAt(item.id, `${factPath}.id`);
+    if (factIds.has(item.id)) fail(`${factPath}.id`, "must be unique inside one MachineResult");
+    factIds.add(item.id);
+    enumAt(item.kind, FACT_KINDS, `${factPath}.kind`);
+    stringAt(item.statement, `${factPath}.statement`);
+    enumAt(item.status, FACT_STATUSES, `${factPath}.status`);
+    sourceRefsAt(item.evidenceRefs, `${factPath}.evidenceRefs`);
+    if (item.status === "VERIFIED" && item.evidenceRefs.length === 0) {
+      fail(`${factPath}.evidenceRefs`, "VERIFIED facts require at least one evidence ref");
+    }
+  });
+  return facts;
+}
+
+function validatePassFactSet(value, path) {
+  const facts = validateMachineFactSet(value, path);
+  if (facts.length === 0) fail(path, "PASS-ENGINEERING requires at least one fact");
+  const contradictoryIndex = facts.findIndex((fact) => fact.status !== "VERIFIED");
+  if (contradictoryIndex >= 0) {
+    fail(
+      `${path}[${contradictoryIndex}].status`,
+      "PASS-ENGINEERING requires every fact status to be VERIFIED",
+    );
+  }
+  return facts;
+}
+
+function isPassFactSet(value, path) {
+  try {
+    validatePassFactSet(value, path);
+    return true;
+  } catch (error) {
+    if (error instanceof ContractError) return false;
+    throw error;
+  }
+}
+
 export function validateMachineResult(value, path = "machineResult") {
   const object = exactKeys(
     value,
@@ -242,23 +290,11 @@ export function validateMachineResult(value, path = "machineResult") {
   stringAt(object.attemptId, `${path}.attemptId`);
   validateSourceRef(object.sourceRef, `${path}.sourceRef`);
   enumAt(object.verdict, MACHINE_VERDICTS, `${path}.verdict`);
-  arrayAt(object.facts, `${path}.facts`).forEach((fact, index) => {
-    const factPath = `${path}.facts[${index}]`;
-    const item = exactKeys(
-      fact,
-      ["id", "kind", "statement", "status", "evidenceRefs"],
-      ["id", "kind", "statement", "status", "evidenceRefs"],
-      factPath,
-    );
-    stringAt(item.id, `${factPath}.id`);
-    enumAt(item.kind, FACT_KINDS, `${factPath}.kind`);
-    stringAt(item.statement, `${factPath}.statement`);
-    enumAt(item.status, FACT_STATUSES, `${factPath}.status`);
-    sourceRefsAt(item.evidenceRefs, `${factPath}.evidenceRefs`);
-    if (item.status === "VERIFIED" && item.evidenceRefs.length === 0) {
-      fail(`${factPath}.evidenceRefs`, "VERIFIED facts require at least one evidence ref");
-    }
-  });
+  if (object.verdict === "PASS-ENGINEERING") {
+    validatePassFactSet(object.facts, `${path}.facts`);
+  } else {
+    validateMachineFactSet(object.facts, `${path}.facts`);
+  }
   stringsAt(object.limitations, `${path}.limitations`);
   stringsAt(object.unresolved, `${path}.unresolved`);
   return value;
@@ -496,8 +532,6 @@ export function deriveMachineVerdict({ authoritativeVerdict, claimedVerdict, fac
   if (authoritativeVerdict !== "PASS-ENGINEERING") return authoritativeVerdict;
   if (claimedVerdict !== "PASS-ENGINEERING") return "INCOMPLETE";
 
-  const hasVerifiedEvidence = facts.some(
-    (fact) => fact?.status === "VERIFIED" && Array.isArray(fact.evidenceRefs) && fact.evidenceRefs.length > 0,
-  );
-  return hasVerifiedEvidence ? "PASS-ENGINEERING" : "INCOMPLETE";
+  const factSet = arrayAt(facts, "facts");
+  return isPassFactSet(factSet, "facts") ? "PASS-ENGINEERING" : "INCOMPLETE";
 }

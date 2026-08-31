@@ -42,8 +42,11 @@ describe("session-only candidate outbox", () => {
   it("persists a receipt and candidate but never HPS or canonical state", () => {
     const candidate = candidateResult();
     const data = createOutboxEntry(candidate);
+    assert.equal(data.schema, "hpi/session-outbox/v2");
+    assert.equal(data.adapterVersion, "hpi-session/0.2.0");
     assert.equal(data.authority, "SESSION_ONLY_NOT_PROJECT_CANONICAL");
     assert.equal(data.transportStatus, "PENDING_CANONICAL_WRITER");
+    assert.match(data.candidateDigest, /^[a-f0-9]{64}$/u);
     assert.equal(data.candidate.status, "CANDIDATE");
     assert.equal("hps" in data, false);
     assert.equal("humanResult" in data, false);
@@ -57,6 +60,12 @@ describe("session-only candidate outbox", () => {
       [customEntry("entry-1", data), customEntry("entry-duplicate", data)],
       projection.sourceDigest,
     );
+    const reverse = restoreOutbox(
+      [customEntry("entry-duplicate", data), customEntry("entry-1", data)],
+      projection.sourceDigest,
+    );
+    assert.deepEqual(reverse, restored);
+    assert.equal(restored.schema, "hpi/restored-outbox/v2");
     assert.equal(restored.items.length, 1);
     assert.equal(restored.current.length, 1);
     assert.equal(restored.stale.length, 0);
@@ -70,6 +79,42 @@ describe("session-only candidate outbox", () => {
       canonicalCommitted: 0,
       boundary: "session candidate outbox only",
     });
+  });
+
+  it("quarantines same-event-id divergent candidates independent of session order", () => {
+    const firstCandidate = candidateResult("talk-event-conflict");
+    const secondCandidate = structuredClone(firstCandidate);
+    secondCandidate.payload = {
+      ...secondCandidate.payload,
+      action: "reject",
+      optionId: undefined,
+    };
+    delete secondCandidate.payload.optionId;
+    const first = createOutboxEntry(firstCandidate, { talkEventId: "receipt-a" });
+    const second = createOutboxEntry(secondCandidate, { talkEventId: "receipt-b" });
+
+    const forward = restoreOutbox(
+      [customEntry("entry-a", first), customEntry("entry-b", second)],
+      projection.sourceDigest,
+    );
+    const reverse = restoreOutbox(
+      [customEntry("entry-b", second), customEntry("entry-a", first)],
+      projection.sourceDigest,
+    );
+    for (const restored of [forward, reverse]) {
+      assert.equal(restored.items.length, 0);
+      assert.equal(restored.current.length, 0);
+      assert.equal(restored.stale.length, 0);
+      assert.equal(restored.errors.length, 1);
+      assert.equal(restored.errors[0].code, "CANDIDATE_IDENTITY_CONFLICT");
+      assert.equal(restored.errors[0].candidateEventId, firstCandidate.eventId);
+      assert.deepEqual(restored.errors[0].entryIds, ["entry-a", "entry-b"]);
+      assert.deepEqual(
+        restored.errors[0].candidateDigests,
+        [first.candidateDigest, second.candidateDigest].sort(),
+      );
+    }
+    assert.deepEqual(reverse, forward);
   });
 
   it("marks the old decision candidate stale after source changes", () => {
@@ -94,6 +139,36 @@ describe("session-only candidate outbox", () => {
     assert.equal(restored.items.length, 1);
     assert.equal(restored.errors.length, 1);
     assert.match(restored.errors[0].error, /authority boundary is invalid/);
+  });
+
+  it("quarantines malformed receipt envelopes without breaking valid recovery", () => {
+    const good = createOutboxEntry(candidateResult());
+    const corruptions = [
+      ["missing recordedAt", (data) => delete data.receipt.recordedAt, /recordedAt is required/],
+      ["null recordedAt", (data) => { data.receipt.recordedAt = null; }, /non-empty string/],
+      ["number recordedAt", (data) => { data.receipt.recordedAt = 123; }, /non-empty string/],
+      ["non-canonical recordedAt", (data) => { data.receipt.recordedAt = "2026-08-30"; }, /canonical UTC ISO/],
+      ["forged receipt id", (data) => { data.receiptId = "RECEIPT-FORGED"; }, /does not match receipt and candidate digest/],
+      ["missing candidate digest", (data) => { delete data.candidateDigest; }, /candidateDigest is required/],
+      ["forged candidate digest", (data) => { data.candidateDigest = "0".repeat(64); }, /does not match candidate content/],
+      ["tampered candidate", (data) => { data.candidate.payload.action = "tampered"; }, /does not match candidate content/],
+      ["wrong adapter", (data) => { data.adapterVersion = "hpi-session/other"; }, /adapterVersion is invalid/],
+      ["extra envelope key", (data) => { data.accepted = true; }, /accepted is not allowed/],
+    ];
+    const entries = corruptions.map(([name, mutate], index) => {
+      const data = structuredClone(good);
+      mutate(data);
+      return customEntry(`bad-${index}-${name}`, data);
+    });
+    entries.push(customEntry("good-entry", good));
+
+    const restored = restoreOutbox(entries, projection.sourceDigest);
+    assert.equal(restored.items.length, 1);
+    assert.equal(restored.current.length, 1);
+    assert.equal(restored.errors.length, corruptions.length);
+    corruptions.forEach(([, , expected], index) => {
+      assert.match(restored.errors[index].error, expected);
+    });
   });
 
   it("ignores unrelated custom entries", () => {

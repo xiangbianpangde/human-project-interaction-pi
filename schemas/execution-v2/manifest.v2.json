@@ -1,0 +1,65 @@
+{
+  "schema_set": "hpi/wire/execution/v2",
+  "naming": "snake_case",
+  "compatibility": {
+    "external_keys": "snake_case_only",
+    "internal_keys": "camelCase",
+    "mixed_keys": "rejected",
+    "inbound_runtime": "not_implemented"
+  },
+  "dependencies": [
+    {
+      "schema_set": "hpi/wire/v1",
+      "schema_set_digest": "1d08d1acdda0cf05b29aae46949c900e49349eb21225d75698c6a44c34264725"
+    },
+    {
+      "schema_set": "hpi/wire/execution/v1",
+      "schema_set_digest": "450698c6e3218b3419f081dc47576f94edaea36ee0da6a97b35c80ef6d9e88d1"
+    }
+  ],
+  "schemas": [
+    {
+      "name": "execution_common",
+      "id": "urn:hpi:wire:execution-common:v2",
+      "path": "execution-common.v2.schema.json",
+      "sha256": "b601970a8e506e21ef005ebefd96b809a5caab8a27edbb8413adf244edbaeefa"
+    },
+    {
+      "name": "attempt",
+      "id": "urn:hpi:wire:attempt:v2",
+      "path": "attempt.v2.schema.json",
+      "sha256": "3c012225ec7881dcb9185d018d41f041c3fc5c4982aac6a4d996d773e22aaa74"
+    },
+    {
+      "name": "evidence",
+      "id": "urn:hpi:wire:evidence:v2",
+      "path": "evidence.v2.schema.json",
+      "sha256": "2f72068649891d3174a3a0cec78d711dfbd68edcbeacbca339ae51daf0d0030d"
+    },
+    {
+      "name": "handoff_bundle",
+      "id": "urn:hpi:wire:handoff-bundle:v2",
+      "path": "handoff-bundle.v2.schema.json",
+      "sha256": "c82ed29e8c0e6167f1f285eb6dce592202fbcf3f40812c588a59613b60443cbc"
+    },
+    {
+      "name": "result_bundle",
+      "id": "urn:hpi:wire:result-bundle:v2",
+      "path": "result-bundle.v2.schema.json",
+      "sha256": "aafa52fda9f259d297483f0feb3afa9b3dc62716eb922cd622f5c380e450e253"
+    },
+    {
+      "name": "stale_report",
+      "id": "urn:hpi:wire:stale-report:v2",
+      "path": "stale-report.v2.schema.json",
+      "sha256": "6ae157f998596b6a763830b1b4cec8fb9f4c0521ce2d47944f7a8ac2a4dd7ae9"
+    },
+    {
+      "name": "task_slice",
+      "id": "urn:hpi:wire:task-slice:v2",
+      "path": "task-slice.v2.schema.json",
+      "sha256": "8c8a7e94582376c727bc875c747801716e614fcb3845c6d4e54d6cb66179f056"
+    }
+  ],
+  "schema_set_digest": "bccb373985dacfdff8eaa1c2f7001cb4644a1d4c931e5359ce4200f69836439c"
+}

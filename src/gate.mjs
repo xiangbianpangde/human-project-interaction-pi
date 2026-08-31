@@ -7,7 +7,7 @@ import {
   validateEscalationRequest,
 } from "./contracts.mjs";
 
-export const GATE_VERSION = "hpi-escalation-gate/0.1.0";
+export const GATE_VERSION = "hpi-escalation-gate/0.2.0";
 
 const MACHINE_FACT_PATTERNS = Object.freeze([
   {
@@ -82,6 +82,74 @@ function rejectionKind(machineStatus, candidateCategory) {
   return "MACHINE_FACT_REJECTED";
 }
 
+function escalationRequestDigest(request, sourceDigest) {
+  return sha256({
+    schema: request.schema,
+    projectId: request.projectId,
+    category: request.category,
+    decisionUnit: request.decisionUnit,
+    question: request.question,
+    facts: request.facts,
+    options: request.options,
+    recommendation: request.recommendation,
+    safeDefault: request.safeDefault,
+    affectedRefs: request.affectedRefs,
+    oneQuestion: request.oneQuestion,
+    sourceDigest,
+  });
+}
+
+function untrustedEscalation(projectId, machineStatus, sourceDigest, reason) {
+  return {
+    schema: "hpi/escalation-rejection/v1",
+    gateVersion: GATE_VERSION,
+    kind: "UNTRUSTED_ESCALATION_REJECTED",
+    projectId,
+    machineStatus,
+    sourceDigest,
+    reason,
+    indicators: ["UNTRUSTED_REQUEST_BINDING"],
+    missingEvidence: [],
+    humanEscalation: null,
+  };
+}
+
+function trustedRequestFor(candidate, context, projectId, sourceDigest) {
+  const requests = context?.trustedRequests;
+  if (!Array.isArray(requests)) {
+    return {
+      error: "human escalation requires the current projector-owned request set",
+    };
+  }
+  const candidateSourceDigest = typeof candidate.sourceDigest === "string" ? candidate.sourceDigest : "";
+  if (candidateSourceDigest !== sourceDigest) {
+    return { error: "candidate.sourceDigest does not match the current source snapshot" };
+  }
+  const requestId = typeof candidate.requestId === "string" ? candidate.requestId : "";
+  const requestDigest = typeof candidate.requestDigest === "string" ? candidate.requestDigest : "";
+  const request = requests.find((entry) => entry?.requestId === requestId);
+  if (!request || request.requestDigest !== requestDigest) {
+    return { error: "candidate request id/digest is not current" };
+  }
+  validateEscalationRequest(request);
+  if (request.projectId !== projectId) {
+    return { error: "candidate project does not own the bound escalation request" };
+  }
+  if (request.requestDigest !== escalationRequestDigest(request, sourceDigest)) {
+    return { error: "projector-owned escalation request digest is invalid for the current source" };
+  }
+  for (const [candidateKey, requestKey] of [
+    ["category", "category"],
+    ["decisionUnit", "decisionUnit"],
+    ["question", "question"],
+  ]) {
+    if (candidate[candidateKey] !== undefined && candidate[candidateKey] !== request[requestKey]) {
+      return { error: `candidate.${candidateKey} differs from the bound escalation request` };
+    }
+  }
+  return { request };
+}
+
 export function inspectMachineFactQuestion(text) {
   const input = typeof text === "string" ? text : "";
   const indicators = MACHINE_FACT_PATTERNS
@@ -129,43 +197,16 @@ export function evaluateEscalation(candidate, context) {
     throw new GateError(`candidate.category must be a human decision category: ${HUMAN_CATEGORIES.join(", ")}`);
   }
 
-  const base = {
-    schema: SCHEMAS.escalationRequest,
-    projectId,
-    category,
-    decisionUnit: nonEmptyString(candidate.decisionUnit, "candidate.decisionUnit"),
-    question: nonEmptyString(candidate.question, "candidate.question"),
-    facts: candidate.facts,
-    options: candidate.options,
-    recommendation: nonEmptyString(candidate.recommendation, "candidate.recommendation"),
-    safeDefault: "NO_STATE_CHANGE",
-    affectedRefs: candidate.affectedRefs,
-    oneQuestion: candidate.oneQuestion ?? true,
-    sourceDigest,
-  };
-  const requestDigest = sha256(base);
-  const request = {
-    schema: base.schema,
-    requestId: candidate.requestId ?? `ER-${requestDigest.slice(0, 20).toUpperCase()}`,
-    projectId: base.projectId,
-    category: base.category,
-    decisionUnit: base.decisionUnit,
-    question: base.question,
-    facts: base.facts,
-    options: base.options,
-    recommendation: base.recommendation,
-    safeDefault: base.safeDefault,
-    affectedRefs: base.affectedRefs,
-    requestDigest,
-    oneQuestion: base.oneQuestion,
-  };
-  validateEscalationRequest(request);
+  const trusted = trustedRequestFor(candidate, context, projectId, sourceDigest);
+  if (!trusted.request) {
+    return untrustedEscalation(projectId, machineStatus, sourceDigest, trusted.error);
+  }
   return {
     schema: "hpi/escalation-accepted/v1",
     gateVersion: GATE_VERSION,
     kind: "HUMAN_DECISION_REQUIRED",
     sourceDigest,
-    request,
+    request: structuredClone(trusted.request),
   };
 }
 

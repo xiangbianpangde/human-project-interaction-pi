@@ -1,5 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import {
+  inspectAuthoritativeFiles,
+  readAuthoritativeFiles,
+} from "./adapters/authoritative-files.mjs";
 
 import {
   SCHEMAS,
@@ -342,19 +344,15 @@ export function normalizeTs001Pilot({
 }
 
 export function detectTs001Pilot(projectRoot) {
-  const root = resolve(projectRoot);
-  const paths = Object.fromEntries(
-    Object.entries(TS001_FILES).map(([key, filename]) => [key, join(root, filename)]),
-  );
-  const missing = Object.entries(paths)
-    .filter(([, path]) => !existsSync(path))
-    .map(([key]) => TS001_FILES[key]);
+  const inspected = inspectAuthoritativeFiles(projectRoot, TS001_FILES);
   return {
-    available: missing.length === 0,
-    root,
-    paths,
-    missing,
+    ...inspected,
     adapter: TS001_ADAPTER_VERSION,
+    reason: inspected.available
+      ? undefined
+      : inspected.unsafe.length > 0
+        ? "TS-001 authority file set is unsafe"
+        : "TS-001 authority file set is incomplete",
   };
 }
 
@@ -364,12 +362,21 @@ export function loadTs001Pilot(projectRoot, options = {}) {
     throw new AdapterError("TS-001 pilot adapter is unavailable", {
       projectRoot: detected.root,
       missing: detected.missing,
+      unsafe: detected.unsafe,
+    });
+  }
+  let texts;
+  try {
+    texts = readAuthoritativeFiles(projectRoot, TS001_FILES);
+  } catch (error) {
+    throw new AdapterError("TS-001 authority files changed or became unsafe while reading", {
+      cause: error,
     });
   }
   return normalizeTs001Pilot({
-    contractText: readFileSync(detected.paths.contract, "utf8"),
-    prdText: readFileSync(detected.paths.prd, "utf8"),
-    technicalDesignText: readFileSync(detected.paths.technicalDesign, "utf8"),
+    contractText: texts.contract,
+    prdText: texts.prd,
+    technicalDesignText: texts.technicalDesign,
     pointers: TS001_FILES,
     selfReports: options.selfReports ?? [],
   });

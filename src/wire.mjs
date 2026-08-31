@@ -10,7 +10,7 @@ import {
 } from "./contracts.mjs";
 import { GATE_VERSION } from "./gate.mjs";
 
-export const WIRE_CODEC_VERSION = "hpi-wire-codec/1.0.0";
+export const WIRE_CODEC_VERSION = "hpi-wire-codec/1.1.0";
 
 export const WIRE_OBJECT_SCHEMAS = Object.freeze({
   machine_result: "urn:hpi:wire:machine-result:v1",
@@ -56,9 +56,12 @@ export function toWireMachineResult(value) {
   validateMachineResult(value);
   if (
     value.verdict === "PASS-ENGINEERING" &&
-    !value.facts.some((fact) => fact.status === "VERIFIED" && fact.evidenceRefs.length > 0)
+    (value.facts.length === 0 ||
+      !value.facts.every((fact) => fact.status === "VERIFIED" && fact.evidenceRefs.length > 0))
   ) {
-    throw new WireCodecError("PASS-ENGINEERING requires a VERIFIED fact with evidence before wire export");
+    throw new WireCodecError(
+      "PASS-ENGINEERING requires a non-empty all-VERIFIED fact set with evidence before wire export",
+    );
   }
   return {
     schema: WIRE_SCHEMA_VALUES.machine_result,

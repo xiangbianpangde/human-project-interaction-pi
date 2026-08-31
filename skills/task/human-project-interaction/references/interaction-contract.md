@@ -11,10 +11,13 @@ Adapter selection must produce exactly one match. Zero or multiple matches fail 
 
 ## External wire contracts
 
-Two immutable JSON Schema 2020-12 sets use snake_case-only external keys:
+The immutable JSON Schema 2020-12 lineage uses snake_case-only external keys:
 
 1. `hpi/wire/v1` covers HPS, MachineResult, HumanResult, HumanBrief, EscalationRequest, and TraceLink.
-2. `hpi/wire/execution/v1` covers TaskSlice, HandoffBundle, Attempt, Evidence, ResultBundle, and StaleReport; its manifest depends on the exact `hpi/wire/v1` set digest.
+2. `hpi/wire/execution/v1` is the preserved 0.4 execution contract.
+3. `hpi/wire/execution/v2` is the current execution contract; its manifest pins the exact interaction-v1 and execution-v1 set digests.
+
+v2 supersedes rather than edits v1. It defines host-independent POSIX scoped paths; verdict derivation and its deterministic companion validator share a non-empty, structurally valid, uniquely identified, all-VERIFIED PASS fact-set contract. The execution companion additionally requires full `id + revision + sha256` Task/Evidence identity, `claim_refs` binding to the exact fact, direct high-trust Evidence, duplicate Evidence-id rejection, and complete-ledger conflict checks before replay classification.
 
 The camelCase objects inside the Pi runtime are an internal profile; only `src/wire.mjs` / `src/execution.mjs` codecs may export them. Each manifest pins every schema SHA and complete set digest. Missing files, byte drift, dependency drift, mixed casing, or a digest mismatch fail closed before projection/query.
 
@@ -30,7 +33,7 @@ Inbound runtime remains `not_implemented`. Execution helpers only check immutabl
 | `/hpi trace <id>` | Read matching TraceLinks |
 | `/hpi wire [id]` | Export schema-bound snake_case objects without starting an Agent turn |
 | `/hpi decisions` | Read current requests and the session candidate outbox |
-| `/hpi verify` | Rebuild the projection and verify both pinned schema sets plus their dependency; does not run TS-001 |
+| `/hpi verify` | Rebuild the projection and verify the pinned interaction-v1 → execution-v1 → execution-v2 lineage; does not run TS-001 |
 
 ## `hpi_query`
 
@@ -50,7 +53,7 @@ All operations are read-only.
 - `talkContent`: parsed `hpi/talk/v1` object;
 - `talkContentJson`: exact JSON string for `talk_render`;
 - `wireContract`: interaction schema-set id, naming rule, and pinned digest;
-- `executionWireContract`: execution schema-set id, naming rule, and pinned digest.
+- `executionWireContract`: current execution-v2 set id, naming rule, pinned digest, and immutable ancestor dependencies.
 
 Do not regenerate `talkContentJson` from prose.
 
@@ -69,14 +72,17 @@ Identity boundaries are explicit: `sourceDigest` identifies the Adapter plus can
 }
 ```
 
+`op: "escalation"` accepts only a binding to a request already emitted by the current projector: `projectId`, `category`, `requestId`, `requestDigest`, and `sourceDigest`. Optional echoed `question` or `decisionUnit` must exactly equal the projector-owned request. Free-form model prose cannot create a new request or change its category.
+
 Possible terminal shapes:
 
 | Kind | Meaning | State effect |
 |---|---|---|
-| `NOT_RUN` | The request tries to turn an unrun machine fact into a human belief question | none |
+| `NOT_RUN` | The bound/current request still tries to turn an unrun machine fact into a human belief question | none |
 | `EVIDENCE_GAP` | Required machine evidence is missing | none |
 | `MACHINE_FACT_REJECTED` | The question belongs to deterministic verification | none |
-| `HUMAN_DECISION_REQUIRED` | One valid semantic decision passed the Gate | may create an escalation candidate |
+| `UNTRUSTED_ESCALATION_REJECTED` | The payload is unbound, forged, mismatched, or not projector-owned | none |
+| `HUMAN_DECISION_REQUIRED` | One current projector-owned semantic decision passed the Gate | may create an escalation candidate |
 | `READ_ONLY` | A `/talk` navigation or refresh event | none |
 | `STALE` | Request/source digest no longer matches | none; rebuild |
 | `CANDIDATE_CREATED` | A candidate was written to Pi session outbox | session only |
@@ -139,15 +145,15 @@ No value on one axis implies a value on the other.
 The extension appends custom entries with:
 
 - custom type `hpi-candidate-outbox`;
-- schema `hpi/session-outbox/v1`;
+- schema `hpi/session-outbox/v2`; integrity binds the complete candidate digest to its receipt;
 - authority `SESSION_ONLY_NOT_PROJECT_CANONICAL`;
 - transport status `PENDING_CANONICAL_WRITER`.
 
-The outbox preserves candidate receipts across resume. It does not participate in HPS projection and cannot establish HumanResult. Source digest drift marks previous candidates `STALE`.
+The outbox preserves valid candidate receipts across resume. Recovery validates the complete envelope, canonical UTC timestamps, adapter version, candidate id, full candidate digest, allowed fields, and the receipt-plus-candidate hash. Same event id with divergent candidate digests yields deterministic `CANDIDATE_IDENTITY_CONFLICT` and restores neither candidate; one malformed entry is quarantined without discarding unrelated valid entries. It does not participate in HPS projection and cannot establish HumanResult. Source digest drift marks previous candidates `STALE`.
 
 ## R-ICL v4 invariant
 
-The Adapter reads only the declared current/worklog boundary. It must not invoke R-ICL generators, gates, tests, Git writes, or append commands; it must not use drafts, raw work products, or Wiki as current authority. Until typed Handoff/Result/Evidence records exist in the declared authority set and a validation-only intake is connected, the machine axis remains `INCOMPLETE` and no human decision is fabricated.
+The Adapter reads only the declared current/worklog boundary. Each declared authority input must resolve inside the project root, be a regular non-symlink file, and stay within the per-file size limit. It must not invoke R-ICL generators, gates, tests, Git writes, or append commands; it must not use drafts, raw work products, or Wiki as current authority. Until typed Handoff/Result/Evidence records exist in the declared authority set and a validation-only intake is connected, the machine axis remains `INCOMPLETE` and no human decision is fabricated.
 
 ## TS-001 pilot invariant
 

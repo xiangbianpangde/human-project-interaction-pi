@@ -52,6 +52,7 @@ type RuntimeState = {
     schemaSet: string;
     naming: string;
     schemaSetDigest: string;
+    dependencies: Array<{ schema_set: string; schema_set_digest: string }>;
   };
 };
 
@@ -158,6 +159,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
           schemaSet: loadedExecutionWireSchema.schemaSet,
           naming: loadedExecutionWireSchema.naming,
           schemaSetDigest: loadedExecutionWireSchema.schemaSetDigest,
+          dependencies: loadedExecutionWireSchema.dependencies,
         },
       };
     } catch (error) {
@@ -190,6 +192,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
         wireSchemaSetDigest: state.wireSchema?.schemaSetDigest,
         executionWireSchemaSet: state.executionWireSchema?.schemaSet,
         executionWireSchemaSetDigest: state.executionWireSchema?.schemaSetDigest,
+        executionWireDependencies: state.executionWireSchema?.dependencies,
         wireNaming: state.wireSchema?.naming,
         outbox: summarizeOutbox(state.restoredOutbox),
         boundaries: {
@@ -244,6 +247,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
           schema_set: state.executionWireSchema?.schemaSet,
           schema_set_digest: state.executionWireSchema?.schemaSetDigest,
           naming: state.executionWireSchema?.naming,
+          dependencies: state.executionWireSchema?.dependencies,
           runtime_intake: "NOT_IMPLEMENTED",
           canonical_writer: "NOT_IMPLEMENTED",
           available_project_objects: 0,
@@ -331,7 +335,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("hpi", {
-    description: "Open Human Project Interaction, inspect a brief/trace/decision, export frozen wire objects, or verify the read-only projection and both schema sets.",
+    description: "Open Human Project Interaction, inspect a brief/trace/decision, export frozen wire objects, or verify the read-only projection and frozen schema lineage.",
     getArgumentCompletions: (prefix) => {
       const values = ["open", "status", "brief", "trace", "wire", "decisions", "verify", "help"];
       const items = values
@@ -350,7 +354,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
             "/hpi trace <id> — inspect semantic trace",
             "/hpi wire [id] — export frozen snake_case wire objects",
             "/hpi decisions — inspect pending requests and session candidates",
-            "/hpi verify — rebuild the read-only projection and verify both frozen wire-schema sets",
+            "/hpi verify — rebuild the read-only projection and verify the frozen interaction/execution schema lineage",
           ].join("\n"),
           "info",
         );
@@ -390,12 +394,13 @@ export default function hpiExtension(pi: ExtensionAPI) {
             wireSchemaSetDigest: verifiedWireSchema.schemaSetDigest,
             executionWireSchemaSet: verifiedExecutionWireSchema.schemaSet,
             executionWireSchemaSetDigest: verifiedExecutionWireSchema.schemaSetDigest,
+            executionWireDependencies: verifiedExecutionWireSchema.dependencies,
             wireNaming: verifiedWireSchema.naming,
             schemaIntegrity: true,
             machine: first.hps.activeWork[0].machineStatus,
             human: first.hps.activeWork[0].humanStatus,
             outbox: summarizeOutbox(state.restoredOutbox),
-            boundary: "projection and two schema-set verification only; execution lifecycle is pure preview and the adapter does not run project tests or write canonical state",
+            boundary: "projection and frozen schema-lineage verification only; execution lifecycle is pure preview and the adapter does not run project tests or write canonical state",
           };
           ctx.ui.notify(compactJson(result), result.deterministic ? "info" : "error");
         } catch (error) {
@@ -492,6 +497,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
         const gateResult = evaluateEscalation(candidate, {
           machineStatus: projection.hps.activeWork[0].machineStatus,
           sourceDigest: projection.sourceDigest,
+          trustedRequests: projection.escalationRequests,
         });
         if (gateResult.kind !== "HUMAN_DECISION_REQUIRED") {
           return {

@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-import { sha256 } from "../src/contracts.mjs";
+import { deriveMachineVerdict, sha256, validateMachineResult } from "../src/contracts.mjs";
 import {
   ATTEMPT_STATUSES,
   EVIDENCE_STATUSES,
@@ -35,16 +35,32 @@ import {
 import {
   EXECUTION_WIRE_SCHEMA_SET,
   EXECUTION_WIRE_SCHEMA_SET_DIGEST,
+  EXECUTION_WIRE_SCHEMA_SET_DIGEST_V1,
+  EXECUTION_WIRE_SCHEMA_SET_V1,
   WIRE_SCHEMA_SET,
   WIRE_SCHEMA_SET_DIGEST,
   loadExecutionWireSchemaSet,
+  loadExecutionWireSchemaSetV1,
   loadWireSchemaSet,
 } from "../src/wire-schema.mjs";
+import { frozenIdentityKey } from "../src/execution/contract.mjs";
+import { toWireMachineResult } from "../src/wire.mjs";
 import { buildExecutionFixture } from "./support/execution-fixture.mjs";
 
-const fixtureRoot = new URL("./fixtures/execution-wire-contract/", import.meta.url);
+const v1FixtureRoot = new URL("./fixtures/execution-wire-contract/", import.meta.url);
+const v1ValidFixtures = JSON.parse(readFileSync(new URL("valid.json", v1FixtureRoot), "utf8"));
+const v1InvalidFixtures = JSON.parse(readFileSync(new URL("invalid.json", v1FixtureRoot), "utf8"));
+const fixtureRoot = new URL("./fixtures/execution-wire-contract-v2/", import.meta.url);
 const validFixtures = JSON.parse(readFileSync(new URL("valid.json", fixtureRoot), "utf8"));
 const invalidFixtures = JSON.parse(readFileSync(new URL("invalid.json", fixtureRoot), "utf8"));
+const v1SchemaIds = Object.freeze({
+  task_slice: "urn:hpi:wire:task-slice:v1",
+  handoff_bundle: "urn:hpi:wire:handoff-bundle:v1",
+  attempt: "urn:hpi:wire:attempt:v1",
+  evidence: "urn:hpi:wire:evidence:v1",
+  result_bundle: "urn:hpi:wire:result-bundle:v1",
+  stale_report: "urn:hpi:wire:stale-report:v1",
+});
 const revisionKeys = Object.freeze({
   task_slice: "task_revision",
   handoff_bundle: "handoff_revision",
@@ -56,15 +72,16 @@ const revisionKeys = Object.freeze({
 
 function createAjv() {
   const interaction = loadWireSchemaSet();
+  const executionV1 = loadExecutionWireSchemaSetV1();
   const execution = loadExecutionWireSchemaSet();
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   addFormats(ajv);
-  for (const schema of [...interaction.schemas, ...execution.schemas]) ajv.addSchema(schema);
+  for (const schema of [...interaction.schemas, ...executionV1.schemas, ...execution.schemas]) ajv.addSchema(schema);
   return ajv;
 }
 
-function validateFixture(ajv, name, instance) {
-  const schemaId = EXECUTION_WIRE_OBJECT_SCHEMAS[name];
+function validateFixture(ajv, name, instance, schemaIds = EXECUTION_WIRE_OBJECT_SCHEMAS) {
+  const schemaId = schemaIds[name];
   assert.ok(schemaId, `unknown execution fixture schema ${name}`);
   const validate = ajv.getSchema(schemaId);
   assert.ok(validate, `missing compiled schema ${schemaId}`);
@@ -83,8 +100,8 @@ function assertSnakeCaseKeys(value, path = "$") {
   }
 }
 
-function applyFixtureOperations(testCase) {
-  const instance = structuredClone(validFixtures.instances[testCase.base]);
+function applyFixtureOperations(testCase, sourceFixtures = validFixtures) {
+  const instance = structuredClone(sourceFixtures.instances[testCase.base]);
   for (const operation of testCase.operations) {
     const path = [...operation.path];
     const key = path.pop();
@@ -105,39 +122,43 @@ function reseal(record, revisionKey) {
 }
 
 describe("frozen HPI execution wire schema set", () => {
-  it("loads independently without changing the frozen interaction v1 set", () => {
+  it("loads v2 while preserving the frozen interaction and execution v1 sets", () => {
     const interaction = loadWireSchemaSet();
+    const executionV1 = loadExecutionWireSchemaSetV1();
     const execution = loadExecutionWireSchemaSet();
     assert.equal(interaction.schemaSet, WIRE_SCHEMA_SET);
     assert.equal(interaction.schemaSetDigest, WIRE_SCHEMA_SET_DIGEST);
     assert.equal(interaction.schemas.length, 7);
+    assert.equal(executionV1.schemaSet, EXECUTION_WIRE_SCHEMA_SET_V1);
+    assert.equal(executionV1.schemaSetDigest, EXECUTION_WIRE_SCHEMA_SET_DIGEST_V1);
     assert.equal(execution.schemaSet, EXECUTION_WIRE_SCHEMA_SET);
     assert.equal(execution.schemaSetDigest, EXECUTION_WIRE_SCHEMA_SET_DIGEST);
     assert.deepEqual(execution.dependencies, [
       { schema_set: WIRE_SCHEMA_SET, schema_set_digest: WIRE_SCHEMA_SET_DIGEST },
+      { schema_set: EXECUTION_WIRE_SCHEMA_SET_V1, schema_set_digest: EXECUTION_WIRE_SCHEMA_SET_DIGEST_V1 },
     ]);
     assert.deepEqual(
       execution.schemas.map((schema) => schema.$id).sort(),
       [
-        "urn:hpi:wire:attempt:v1",
-        "urn:hpi:wire:evidence:v1",
-        "urn:hpi:wire:execution-common:v1",
-        "urn:hpi:wire:handoff-bundle:v1",
-        "urn:hpi:wire:result-bundle:v1",
-        "urn:hpi:wire:stale-report:v1",
-        "urn:hpi:wire:task-slice:v1",
+        "urn:hpi:wire:attempt:v2",
+        "urn:hpi:wire:evidence:v2",
+        "urn:hpi:wire:execution-common:v2",
+        "urn:hpi:wire:handoff-bundle:v2",
+        "urn:hpi:wire:result-bundle:v2",
+        "urn:hpi:wire:stale-report:v2",
+        "urn:hpi:wire:task-slice:v2",
       ],
     );
   });
 
   it("fails closed on schema-byte or dependency-digest drift", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "hpi-execution-wire-"));
-    const copiedSchemas = join(temporaryRoot, "execution-v1");
-    cpSync(fileURLToPath(new URL("../schemas/execution-v1/", import.meta.url)), copiedSchemas, {
+    const copiedSchemas = join(temporaryRoot, "execution-v2");
+    cpSync(fileURLToPath(new URL("../schemas/execution-v2/", import.meta.url)), copiedSchemas, {
       recursive: true,
     });
     try {
-      appendFileSync(join(copiedSchemas, "evidence.v1.schema.json"), "\n", "utf8");
+      appendFileSync(join(copiedSchemas, "evidence.v2.schema.json"), "\n", "utf8");
       assert.throws(
         () => loadExecutionWireSchemaSet({ root: copiedSchemas }),
         /hash differs from the frozen manifest/,
@@ -147,12 +168,12 @@ describe("frozen HPI execution wire schema set", () => {
     }
 
     const dependencyRoot = mkdtempSync(join(tmpdir(), "hpi-execution-dependency-"));
-    const copiedDependencySchemas = join(dependencyRoot, "execution-v1");
-    cpSync(fileURLToPath(new URL("../schemas/execution-v1/", import.meta.url)), copiedDependencySchemas, {
+    const copiedDependencySchemas = join(dependencyRoot, "execution-v2");
+    cpSync(fileURLToPath(new URL("../schemas/execution-v2/", import.meta.url)), copiedDependencySchemas, {
       recursive: true,
     });
     try {
-      const manifestPath = join(copiedDependencySchemas, "manifest.v1.json");
+      const manifestPath = join(copiedDependencySchemas, "manifest.v2.json");
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
       manifest.dependencies[0].schema_set_digest = "0".repeat(64);
       writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
@@ -167,7 +188,7 @@ describe("frozen HPI execution wire schema set", () => {
 
   it("keeps executable enum constants equal to the execution common schema", () => {
     const execution = loadExecutionWireSchemaSet();
-    const common = execution.schemas.find((schema) => schema.$id === "urn:hpi:wire:execution-common:v1");
+    const common = execution.schemas.find((schema) => schema.$id === "urn:hpi:wire:execution-common:v2");
     assert.ok(common);
     assert.deepEqual(common.$defs.agent.properties.role.enum, [...EXECUTION_AGENT_ROLES]);
     assert.deepEqual(common.$defs.attempt_status.enum, [...ATTEMPT_STATUSES]);
@@ -196,7 +217,27 @@ describe("frozen HPI execution wire schema set", () => {
     assert.equal(validFixtures.instances.stale_report.project_canonical_changed, false);
   });
 
-  it("rejects every static negative fixture for its declared reason", () => {
+  it("keeps historical v1 static fixtures valid and its negative cases rejected", () => {
+    const ajv = createAjv();
+    assert.equal(v1ValidFixtures.schema_set, EXECUTION_WIRE_SCHEMA_SET_V1);
+    assert.equal(v1InvalidFixtures.schema_set, EXECUTION_WIRE_SCHEMA_SET_V1);
+    for (const [name, instance] of Object.entries(v1ValidFixtures.instances)) {
+      const result = validateFixture(ajv, name, instance, v1SchemaIds);
+      assert.equal(result.valid, true, `${name}: ${JSON.stringify(result.errors)}`);
+      assertWireRecordRevision(instance, revisionKeys[name], `v1Fixtures.${name}`);
+    }
+    for (const testCase of v1InvalidFixtures.cases) {
+      const result = validateFixture(
+        ajv,
+        testCase.schema,
+        applyFixtureOperations(testCase, v1ValidFixtures),
+        v1SchemaIds,
+      );
+      assert.equal(result.valid, false, `${testCase.name} unexpectedly passed v1`);
+    }
+  });
+
+  it("rejects every current static negative fixture for its declared reason", () => {
     const ajv = createAjv();
     assert.equal(invalidFixtures.schema_set, EXECUTION_WIRE_SCHEMA_SET);
     assert.equal(invalidFixtures.fixture_authority, "SYNTHETIC_TEST_ONLY_NOT_PROJECT_CANONICAL");
@@ -273,6 +314,58 @@ describe("execution wire codecs and cross-field gates", () => {
     );
   });
 
+  it("rejects host-dependent paths and timestamp/schema drift", () => {
+    const { inputs } = buildExecutionFixture();
+    for (const candidate of [
+      "/etc/passwd",
+      "C:\\Windows\\System32",
+      "..\\secret",
+      "\\\\server\\share",
+      "../secret",
+      "./local",
+      ".",
+      "..",
+      "a/../secret",
+      "a/./b",
+      "a//b",
+      "a\u0000b",
+    ]) {
+      assert.throws(
+        () =>
+          toWireTaskSlice({
+            ...structuredClone(inputs.taskInput),
+            permissionScope: {
+              ...inputs.taskInput.permissionScope,
+              allowedPaths: [candidate],
+            },
+          }),
+        /host-independent POSIX|path segments/,
+        candidate,
+      );
+    }
+
+    for (const createdAt of [
+      "2026-08-30",
+      "2026-08-30T01:00:00",
+      "08/30/2026 01:00:00",
+      "2026-02-30T01:00:00Z",
+      "2026-08-30T24:00:00Z",
+    ]) {
+      assert.throws(
+        () => toWireTaskSlice({ ...structuredClone(inputs.taskInput), createdAt }),
+        /RFC3339/,
+        createdAt,
+      );
+    }
+
+    const withOffset = toWireTaskSlice({
+      ...structuredClone(inputs.taskInput),
+      createdAt: "2026-08-30T09:00:00+08:00",
+    });
+    const validation = validateFixture(createAjv(), "task_slice", withOffset);
+    assert.equal(validation.valid, true, JSON.stringify(validation.errors));
+  });
+
   it("requires independent Evidence to use a distinct Validation identity", () => {
     const { inputs } = buildExecutionFixture();
     const independent = {
@@ -326,6 +419,17 @@ describe("execution wire codecs and cross-field gates", () => {
       limitations: [],
       unresolved: [],
     };
+    assert.equal(
+      deriveMachineVerdict({
+        authoritativeVerdict: "PASS-ENGINEERING",
+        claimedVerdict: "PASS-ENGINEERING",
+        facts: passMachineResult.facts,
+      }),
+      "PASS-ENGINEERING",
+    );
+    assert.equal(validateMachineResult(passMachineResult), passMachineResult);
+    assert.equal(toWireMachineResult(passMachineResult).verdict, "PASS-ENGINEERING");
+
     const pass = toWireResultBundle({
       ...structuredClone(inputs.resultInput),
       attemptRecord: runningAttempt,
@@ -338,6 +442,78 @@ describe("execution wire codecs and cross-field gates", () => {
     const validation = validateFixture(createAjv(), "result_bundle", pass);
     assert.equal(validation.valid, true, JSON.stringify(validation.errors));
     assert.equal(pass.attempt_ref.revision, runningAttempt.attempt_revision);
+
+    const unidentifiedFact = structuredClone(passMachineResult.facts[0]);
+    delete unidentifiedFact.id;
+    const invalidFactSets = [
+      [passMachineResult.facts[0], structuredClone(passMachineResult.facts[0])],
+      [unidentifiedFact],
+      [{ ...structuredClone(passMachineResult.facts[0]), evidenceRefs: [{}] }],
+    ];
+    for (const facts of invalidFactSets) {
+      assert.equal(
+        deriveMachineVerdict({
+          authoritativeVerdict: "PASS-ENGINEERING",
+          claimedVerdict: "PASS-ENGINEERING",
+          facts,
+        }),
+        "INCOMPLETE",
+      );
+      const invalidMachineResult = { ...structuredClone(passMachineResult), facts };
+      assert.throws(() => validateMachineResult(invalidMachineResult));
+      assert.throws(() => toWireMachineResult(invalidMachineResult));
+      assert.throws(() =>
+        toWireResultBundle({
+          ...structuredClone(inputs.resultInput),
+          attemptRecord: runningAttempt,
+          machineResult: invalidMachineResult,
+          evidenceRecords: [verifiedEvidence],
+          failure: { kind: "NONE", summary: "", retryable: false },
+          unresolved: [],
+          nextAttempt: null,
+        }),
+      );
+    }
+
+    const contradictoryFact = {
+      id: "FACT-FIXTURE-FAILED",
+      kind: "TEST",
+      statement: "A critical acceptance test failed.",
+      status: "FAILED",
+      evidenceRefs: [],
+    };
+    assert.throws(
+      () =>
+        toWireResultBundle({
+          ...structuredClone(inputs.resultInput),
+          attemptRecord: runningAttempt,
+          machineResult: {
+            ...structuredClone(passMachineResult),
+            facts: [...structuredClone(passMachineResult.facts), contradictoryFact],
+          },
+          evidenceRecords: [verifiedEvidence],
+          failure: { kind: "NONE", summary: "", retryable: false },
+          unresolved: [],
+          nextAttempt: null,
+        }),
+      /requires every fact status to be VERIFIED/,
+    );
+    const contradictoryWire = structuredClone(pass);
+    contradictoryWire.machine_result.facts.push({
+      fact_id: contradictoryFact.id,
+      kind: contradictoryFact.kind,
+      statement: contradictoryFact.statement,
+      status: contradictoryFact.status,
+      evidence_refs: [],
+    });
+    const contradictoryValidation = validateFixture(createAjv(), "result_bundle", contradictoryWire);
+    assert.equal(contradictoryValidation.valid, false);
+    assert.ok(
+      contradictoryValidation.errors.some(
+        (error) => error.instancePath.endsWith("/status") && error.keyword === "const",
+      ),
+      JSON.stringify(contradictoryValidation.errors),
+    );
 
     const terminalAttempt = toWireAttempt({
       ...structuredClone(inputs.attemptInput),
@@ -368,7 +544,7 @@ describe("execution wire codecs and cross-field gates", () => {
           unresolved: [],
           nextAttempt: null,
         }),
-      /must resolve to an Evidence record carried by the bundle|requires harness-verified/,
+      /must exactly resolve to a carried Evidence|directly reference harness-verified/,
     );
 
     assert.throws(
@@ -398,6 +574,174 @@ describe("execution wire codecs and cross-field gates", () => {
     );
     assert.equal(pass.task_ref.id, refs.taskRef.id);
   });
+
+  it("keeps frozen identity tuple keys collision-free for arbitrary non-empty ids and revisions", () => {
+    const digest = "a".repeat(64);
+    assert.notEqual(
+      frozenIdentityKey({ id: "left", revision: "middle\u0000right", sha256: digest }),
+      frozenIdentityKey({ id: "left\u0000middle", revision: "right", sha256: digest }),
+    );
+  });
+
+  it("rejects frozen Evidence mismatch, unrelated trust, duplicate logical ids, and task revision drift", () => {
+    const fixture = buildExecutionFixture();
+    const verifiedEvidence = toWireEvidence({
+      ...structuredClone(fixture.inputs.evidenceInput),
+      status: "HARNESS_VERIFIED",
+      verifiedBy: [
+        {
+          agentId: "agent-validation",
+          role: "VALIDATION",
+          harnessRevision: "harness/fixture",
+        },
+      ],
+    });
+    const verifiedRef = wireRecordRef(verifiedEvidence, {
+      idKey: "evidence_id",
+      revisionKey: "evidence_revision",
+    });
+    const runningAttempt = toWireAttempt({
+      ...structuredClone(fixture.inputs.attemptInput),
+      status: "RUNNING",
+      endedAt: undefined,
+      failure: { kind: "NONE", summary: "", retryable: false },
+    });
+    const passInput = {
+      ...structuredClone(fixture.inputs.resultInput),
+      attemptRecord: runningAttempt,
+      machineResult: {
+        ...structuredClone(fixture.inputs.resultInput.machineResult),
+        verdict: "PASS-ENGINEERING",
+        facts: [
+          {
+            ...fixture.inputs.resultInput.machineResult.facts[0],
+            status: "VERIFIED",
+            evidenceRefs: [verifiedRef],
+          },
+        ],
+        limitations: [],
+        unresolved: [],
+      },
+      evidenceRecords: [verifiedEvidence],
+      failure: { kind: "NONE", summary: "", retryable: false },
+      unresolved: [],
+      nextAttempt: null,
+    };
+
+    for (const mismatch of [
+      { ...verifiedRef, revision: "wrong-revision" },
+      { ...verifiedRef, sha256: "0".repeat(64) },
+    ]) {
+      assert.throws(
+        () =>
+          toWireResultBundle({
+            ...structuredClone(passInput),
+            machineResult: {
+              ...structuredClone(passInput.machineResult),
+              facts: [{ ...passInput.machineResult.facts[0], evidenceRefs: [mismatch] }],
+            },
+          }),
+        /must exactly resolve to a carried Evidence id, revision, and sha256/,
+      );
+    }
+
+    const unrelatedClaimEvidence = toWireEvidence({
+      ...structuredClone(fixture.inputs.evidenceInput),
+      status: "HARNESS_VERIFIED",
+      claimRefs: ["FACT-UNRELATED"],
+      verifiedBy: [
+        {
+          agentId: "agent-validation",
+          role: "VALIDATION",
+          harnessRevision: "harness/fixture",
+        },
+      ],
+    });
+    const unrelatedClaimRef = wireRecordRef(unrelatedClaimEvidence, {
+      idKey: "evidence_id",
+      revisionKey: "evidence_revision",
+    });
+    assert.throws(
+      () =>
+        toWireResultBundle({
+          ...structuredClone(passInput),
+          machineResult: {
+            ...structuredClone(passInput.machineResult),
+            facts: [{ ...passInput.machineResult.facts[0], evidenceRefs: [unrelatedClaimRef] }],
+          },
+          evidenceRecords: [unrelatedClaimEvidence],
+        }),
+      /claim_refs must include the referenced fact_id/,
+    );
+
+    const selfReported = toWireEvidence({
+      ...structuredClone(fixture.inputs.evidenceInput),
+      status: "SELF_REPORTED",
+      verifiedBy: [],
+    });
+    const selfReportedRef = wireRecordRef(selfReported, {
+      idKey: "evidence_id",
+      revisionKey: "evidence_revision",
+    });
+    const unrelatedVerified = toWireEvidence({
+      ...structuredClone(fixture.inputs.evidenceInput),
+      evidenceId: "EV-FIXTURE-UNRELATED",
+      pointer: "fixtures/unrelated.log",
+      sha256: "9".repeat(64),
+      status: "HARNESS_VERIFIED",
+      claimRefs: ["FACT-UNRELATED"],
+      verifiedBy: [
+        {
+          agentId: "agent-validation",
+          role: "VALIDATION",
+          harnessRevision: "harness/fixture",
+        },
+      ],
+    });
+    assert.throws(
+      () =>
+        toWireResultBundle({
+          ...structuredClone(passInput),
+          machineResult: {
+            ...structuredClone(passInput.machineResult),
+            facts: [{ ...passInput.machineResult.facts[0], evidenceRefs: [selfReportedRef] }],
+          },
+          evidenceRecords: [selfReported, unrelatedVerified],
+        }),
+      /must directly reference harness-verified or independently validated Evidence/,
+    );
+
+    const duplicateRevision = toWireEvidence({
+      ...structuredClone(fixture.inputs.evidenceInput),
+      pointer: "fixtures/second-revision.log",
+      sha256: "8".repeat(64),
+    });
+    assert.throws(
+      () =>
+        toWireResultBundle({
+          ...structuredClone(fixture.inputs.resultInput),
+          evidenceRecords: [fixture.records.evidence, duplicateRevision],
+        }),
+      /multiple revisions are ambiguous/,
+    );
+
+    const driftedTaskEvidence = toWireEvidence({
+      ...structuredClone(fixture.inputs.evidenceInput),
+      taskRef: {
+        ...fixture.refs.taskRef,
+        revision: "different-task-revision",
+        sha256: "7".repeat(64),
+      },
+    });
+    assert.throws(
+      () =>
+        toWireResultBundle({
+          ...structuredClone(fixture.inputs.resultInput),
+          evidenceRecords: [driftedTaskEvidence],
+        }),
+      /must exactly match task_ref id, revision, and sha256/,
+    );
+  });
 });
 
 describe("revision, idempotency, retry, and stale propagation preview", () => {
@@ -421,6 +765,37 @@ describe("revision, idempotency, retry, and stale propagation preview", () => {
     assert.equal(conflict.kind, "IDEMPOTENCY_CONFLICT");
     assert.equal(conflict.second_commit_created, false);
     assert.equal(conflict.project_canonical_changed, false);
+  });
+
+  it("detects an already-conflicted ledger independent of input ordering", () => {
+    const { records } = buildExecutionFixture();
+    const divergent = structuredClone(records.result);
+    divergent.submitted_at = "2026-08-30T01:13:01.000Z";
+    const resealedDivergent = reseal(divergent, "bundle_revision");
+
+    const forward = classifyResultSubmission(
+      [records.result, resealedDivergent],
+      structuredClone(records.result),
+    );
+    const reverse = classifyResultSubmission(
+      [resealedDivergent, records.result],
+      structuredClone(records.result),
+    );
+    assert.equal(forward.kind, "LEDGER_IDEMPOTENCY_CONFLICT");
+    assert.deepEqual(reverse, forward);
+    assert.equal(forward.conflict_key, records.result.idempotency_key);
+    assert.deepEqual(
+      forward.existing.map((bundle) => bundle.bundle_revision),
+      [records.result.bundle_revision, resealedDivergent.bundle_revision].sort(),
+    );
+    assert.equal(forward.second_commit_created, false);
+    assert.equal(forward.project_canonical_changed, false);
+
+    const duplicateReplay = classifyResultSubmission(
+      [records.result, structuredClone(records.result)],
+      structuredClone(records.result),
+    );
+    assert.equal(duplicateReplay.kind, "REPLAY_EXISTING");
   });
 
   it("rejects forged content revisions and idempotency bindings", () => {

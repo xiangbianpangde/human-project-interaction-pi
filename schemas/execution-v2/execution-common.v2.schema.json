@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:execution-common:v2",
+  "title": "HPI Execution Wire v2 Common Definitions",
+  "$defs": {
+    "frozen_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        },
+        "revision": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        },
+        "sha256": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/sha256"
+        },
+        "pointer": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        }
+      }
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_id",
+        "role",
+        "harness_revision"
+      ],
+      "properties": {
+        "agent_id": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "COORDINATOR",
+            "IMPLEMENTATION",
+            "VALIDATION",
+            "RESEARCH",
+            "RECONCILER"
+          ]
+        },
+        "harness_revision": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        }
+      }
+    },
+    "scoped_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!\\.{1,2}(?:/|$))(?!.*\\/\\.{1,2}(?:/|$))(?!.*//)[^\\u0000-\\u001F\\u007F]+$",
+      "description": "Host-independent POSIX-style project-relative path; backslashes, drive/UNC roots, control characters, empty segments, and dot segments are forbidden."
+    },
+    "permission_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allowed_paths",
+        "forbidden_paths",
+        "data_classes",
+        "network"
+      ],
+      "properties": {
+        "allowed_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scoped_path"
+          }
+        },
+        "forbidden_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scoped_path"
+          }
+        },
+        "data_classes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "PUBLIC",
+              "INTERNAL",
+              "SENSITIVE",
+              "RESTRICTED"
+            ]
+          }
+        },
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "allowed_hosts"
+          ],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "DENY",
+                "ALLOWLIST"
+              ]
+            },
+            "allowed_hosts": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "mode"
+                ],
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "DENY"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "allowed_hosts": {
+                    "type": "array",
+                    "maxItems": 0
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "mode"
+                ],
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "const": "ALLOWLIST"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "allowed_hosts": {
+                    "type": "array",
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "context_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "authoritative",
+        "purpose"
+      ],
+      "properties": {
+        "text": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        },
+        "authoritative": {
+          "const": false
+        },
+        "purpose": {
+          "const": "ORIENTATION_ONLY"
+        }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "summary",
+        "retryable"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "NONE",
+            "EXECUTION",
+            "SCHEMA",
+            "IDENTITY",
+            "REFERENCE",
+            "PERMISSION",
+            "EVIDENCE",
+            "DEVIATION",
+            "OUT_OF_SCOPE",
+            "BLOCKED",
+            "INTERRUPTED"
+          ]
+        },
+        "summary": {
+          "type": "string"
+        },
+        "retryable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "attempt_status": {
+      "type": "string",
+      "enum": [
+        "NOT_STARTED",
+        "RUNNING",
+        "SUCCEEDED",
+        "FAILED",
+        "BLOCKED",
+        "INTERRUPTED",
+        "CANCELLED"
+      ]
+    },
+    "evidence_kind": {
+      "type": "string",
+      "enum": [
+        "COMMAND_LOG",
+        "TEST_LOG",
+        "ARTIFACT",
+        "DIFF",
+        "HASH",
+        "REFERENCE",
+        "PERMISSION",
+        "SIDE_EFFECT",
+        "OTHER"
+      ]
+    },
+    "evidence_status": {
+      "type": "string",
+      "enum": [
+        "SELF_REPORTED",
+        "PRE_HARNESS_CHECKED",
+        "HARNESS_VERIFIED",
+        "INDEPENDENTLY_VALIDATED"
+      ]
+    },
+    "sensitivity": {
+      "type": "string",
+      "enum": [
+        "PUBLIC",
+        "INTERNAL",
+        "SENSITIVE",
+        "RESTRICTED"
+      ]
+    },
+    "changed_fields": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+      }
+    }
+  }
+}
