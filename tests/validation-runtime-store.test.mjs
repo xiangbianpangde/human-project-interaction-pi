@@ -3,6 +3,8 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -234,7 +236,82 @@ describe("isolated validation attempt store", () => {
     }
   });
 
-  it("rejects temp/unknown files, multiple snapshots, and symlinked store boundaries", () => {
+  it("rejects duplicate input and machine-result snapshot cardinality", () => {
+    const inputRoot = temporaryRoot();
+    let inputLock;
+    try {
+      const state = startAttempt(inputRoot, "VRS1-STORE-DUPLICATE-INPUT");
+      inputLock = state.lock;
+      const second = buildValidationAttemptFixture(inputRoot, {
+        attemptId: state.attemptId,
+        declaredAt: "2026-08-31T13:01:00Z",
+        filename: "second-input.json",
+      });
+      publishValidationInputSnapshot(inputRoot, state.attemptId, readFileSync(second.manifestPath));
+      assert.throws(
+        () => readValidationAttemptHistory(inputRoot, state.attemptId),
+        /INPUT_SNAPSHOT_CARDINALITY/u,
+      );
+    } finally {
+      inputLock?.release();
+      rmSync(inputRoot, { recursive: true, force: true });
+    }
+
+    const resultRoot = temporaryRoot();
+    let resultLock;
+    try {
+      const state = startAttempt(resultRoot, "VRS1-STORE-DUPLICATE-RESULT");
+      resultLock = state.lock;
+      const completed = completeAttempt(resultRoot, state);
+      const secondResult = structuredClone(completed.machineResult);
+      secondResult.limitations.push("Distinct immutable bytes for the cardinality test.");
+      publishValidationMachineResult(resultRoot, state.attemptId, secondResult);
+      assert.throws(
+        () => readValidationAttemptHistory(resultRoot, state.attemptId),
+        /MACHINE_RESULT_CARDINALITY/u,
+      );
+    } finally {
+      resultLock?.release();
+      rmSync(resultRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects immutable-content conflicts and record filename identity drift", () => {
+    const conflictRoot = temporaryRoot();
+    let conflictLock;
+    try {
+      const state = startAttempt(conflictRoot, "VRS1-STORE-IMMUTABLE-CONFLICT");
+      conflictLock = state.lock;
+      writeFileSync(join(conflictRoot, state.previousRef.pointer), "{}\n", "utf8");
+      assert.throws(
+        () => publishValidationRecord(conflictRoot, state.records[0]),
+        /IMMUTABLE_FILE_CONFLICT/u,
+      );
+    } finally {
+      conflictLock?.release();
+      rmSync(conflictRoot, { recursive: true, force: true });
+    }
+
+    const filenameRoot = temporaryRoot();
+    let filenameLock;
+    try {
+      const state = startAttempt(filenameRoot, "VRS1-STORE-FILENAME-DRIFT");
+      filenameLock = state.lock;
+      const recordsDir = join(validationStoreRoot(filenameRoot, state.attemptId), "records");
+      const original = readdirSync(recordsDir)[0];
+      const drifted = `000000-${"0".repeat(64)}.json`;
+      renameSync(join(recordsDir, original), join(recordsDir, drifted));
+      assert.throws(
+        () => readValidationAttemptHistory(filenameRoot, state.attemptId),
+        /STORE_RECORD_FILENAME/u,
+      );
+    } finally {
+      filenameLock?.release();
+      rmSync(filenameRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects temp/unknown files and symlinked store boundaries", () => {
     const root = temporaryRoot();
     try {
       const state = startAttempt(root, "VRS1-STORE-CORRUPT");
@@ -245,18 +322,20 @@ describe("isolated validation attempt store", () => {
       rmSync(root, { recursive: true, force: true });
     }
 
-    const symlinkRoot = temporaryRoot();
-    const outside = temporaryRoot();
-    try {
-      mkdirSync(join(symlinkRoot, ".pi", "artifacts"), { recursive: true });
-      symlinkSync(outside, join(symlinkRoot, ".pi", "artifacts", "hpi-validation"), "dir");
-      assert.throws(
-        () => inspectValidationStoreBoundary(symlinkRoot, "VRS1-STORE-SYMLINK"),
-        /UNSAFE_STORE_PATH/u,
-      );
-    } finally {
-      rmSync(symlinkRoot, { recursive: true, force: true });
-      rmSync(outside, { recursive: true, force: true });
+    if (process.platform !== "win32") {
+      const symlinkRoot = temporaryRoot();
+      const outside = temporaryRoot();
+      try {
+        mkdirSync(join(symlinkRoot, ".pi", "artifacts"), { recursive: true });
+        symlinkSync(outside, join(symlinkRoot, ".pi", "artifacts", "hpi-validation"), "dir");
+        assert.throws(
+          () => inspectValidationStoreBoundary(symlinkRoot, "VRS1-STORE-SYMLINK"),
+          /UNSAFE_STORE_PATH/u,
+        );
+      } finally {
+        rmSync(symlinkRoot, { recursive: true, force: true });
+        rmSync(outside, { recursive: true, force: true });
+      }
     }
   });
 });

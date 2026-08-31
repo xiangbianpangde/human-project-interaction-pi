@@ -257,7 +257,7 @@ Store 只对自身 attempt history 有权威。删除整个 store 必须只影�
 - primary task 是 validation-only task，`humanStatus=NOT_NEEDED`；
 - project/milestone authority 仍保持 `INCOMPLETE`，不得把 TS-001 `test_status` 改出 `NOT-RUN`；
 - 可更新的只有 validation attempt status、machine evidence summary、limitations、unresolved 和 latest machine change；
-- 当前 base source 若不再匹配历史 result 引用，ledger 保留历史字节，当前投影降为 `INCOMPLETE`，不得自动 invalidation 或改写历史；
+- 当前 base source 若不再匹配历史 result 引用，ledger 保留历史字节，runtime/status 顶层 `machineResult` 与当前投影均降为 `INCOMPLETE`；base 不可用时顶层 current result 为 `null`。`history.machineResult` / `historicalMachineResult` 只代表不可变历史，不得自动 invalidation、改写历史或宣称当前 PASS；
 - 不创建 HumanResult、Pain/Design 接受或 canonical provenance。
 
 ## 12. `/reload` 与 fresh-process 验收
@@ -311,7 +311,7 @@ Developer conformance lane 可重复运行 TS-001 风格的 schema、ref、path�
 - formal TS-001 保持 NOT-RUN；
 - Extension 在 unsupported/untrusted project fail closed；
 - `/reload` stale identity 零写入；
-- Windows/Linux 路径与 schema byte 验证通过。
+- Windows/Linux contract、store 与 runtime 验证通过；POSIX `SIGKILL` crash 语义仅在 Linux 验证。
 
 ## 16. 明确后置
 

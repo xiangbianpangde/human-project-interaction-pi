@@ -7,7 +7,8 @@
 - Add the append-only `.pi/artifacts/hpi-validation/v1/<attempt_id>` store with exclusive attempt locks, immutable content revisions, fsync + atomic rename, strict record/result resolution, and one-Gate-one-fact PASS binding.
 - Implement `DECLARED → ACCEPTED → RUNNING → TERMINAL`, exact terminal replay without append, deterministic same-ID divergent-input conflict, new-ID retry with exact prior-latest binding, and no non-terminal automatic resume.
 - Add true fresh-process interruption and crash-lock recovery tests; stale locks are never reclaimed automatically and `/reload` is not used as restart proof.
-- Add validation-only MachineResult → restricted HPS/Human Brief projection and the `hpi_validation` preview/run/status tool; preview is zero-write, run cannot write outside the isolated attempt store, and current-source drift projects a historical local PASS as INCOMPLETE without mutating history.
+- Add validation-only MachineResult → restricted HPS/Human Brief projection and the `hpi_validation` preview/run/status tool; preview is zero-write, run cannot write outside the isolated attempt store, and runtime/status current results plus projection fail closed on current-source drift/unavailability without mutating historical results.
+- Cover workspace/authority expansion, retry success/non-latest/locked refs, duplicate snapshots, immutable-content/filename conflicts, and R-ICL rejection; run contract, store, and runtime tests on Windows while keeping POSIX `SIGKILL` recovery on Linux.
 - Keep formal TS-001 `NOT-RUN`; do not add an independent Validation Agent, Agent dispatch, HumanResult/CandidateEvent intake, canonical writer, automatic invalidation, generalized Reconciler, or project transaction authority.
 - Record that the 0.5.0 read-only baseline was independently reviewed as RELEASE and merged to `main`; the 0.6.0 candidate still requires its own independent review and CI.
 

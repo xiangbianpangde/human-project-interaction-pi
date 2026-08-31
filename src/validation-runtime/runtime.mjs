@@ -23,6 +23,7 @@ import {
   VALIDATION_RUNTIME_WIRE_SCHEMA_SET,
   VALIDATION_RUNTIME_WIRE_SCHEMA_SET_DIGEST,
 } from "../wire-schema.mjs";
+import { resolveValidationMachineResultForCurrentBase } from "./projection.mjs";
 
 export const VALIDATION_RUNTIME_RESULT_SCHEMA = "hpi/validation-runtime-result/v1";
 
@@ -173,6 +174,33 @@ function shouldStop(options, phase) {
   return options.testOnlyStopAfterPhase === phase;
 }
 
+function currentMachineResultView(projectRoot, history) {
+  if (!history.machineResult) {
+    return {
+      machineResult: null,
+      currentBaseAvailable: true,
+      currentBaseDrifted: false,
+    };
+  }
+  try {
+    const resolved = resolveValidationMachineResultForCurrentBase(projectRoot, history);
+    return {
+      machineResult: resolved.validationMachineResult,
+      historicalMachineResult: resolved.historicalMachineResult,
+      currentBaseAvailable: true,
+      currentBaseDrifted: resolved.currentBaseDrifted,
+    };
+  } catch (error) {
+    return {
+      machineResult: null,
+      historicalMachineResult: history.machineResult,
+      currentBaseAvailable: false,
+      currentBaseDrifted: true,
+      currentBaseError: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function runValidationAttempt(projectRoot, manifestPointer, options = {}) {
   const intake = readValidationAttemptInput(projectRoot, manifestPointer);
   const attemptId = intake.input.validationAttemptId;
@@ -201,7 +229,7 @@ export function runValidationAttempt(projectRoot, manifestPointer, options = {})
             appendedRecords: 0,
             wroteImmutableState: false,
             history: unlocked(existing),
-            machineResult: existing.machineResult,
+            ...currentMachineResultView(projectRoot, existing),
           });
         }
         return result("INCOMPLETE_INTERRUPTED", intake, {
@@ -223,7 +251,7 @@ export function runValidationAttempt(projectRoot, manifestPointer, options = {})
           candidateInputRef: intake.manifestRef,
         },
         history: unlocked(existing),
-        machineResult: existing.machineResult,
+        ...currentMachineResultView(projectRoot, existing),
       });
     }
 
@@ -342,7 +370,7 @@ export function runValidationAttempt(projectRoot, manifestPointer, options = {})
       wroteImmutableState: true,
       gates: { ...finalGates, gateOutcomes: terminalGateOutcomes, baseSource: undefined },
       history: unlocked(history),
-      machineResult: history.machineResult,
+      ...currentMachineResultView(projectRoot, history),
     });
   } finally {
     lock.release();
@@ -356,6 +384,7 @@ export function getValidationAttemptStatus(projectRoot, attemptId) {
     attemptId,
     authority: VALIDATION_AUTHORITY,
     history,
+    ...currentMachineResultView(projectRoot, history),
     projectCanonicalChanged: false,
   };
 }

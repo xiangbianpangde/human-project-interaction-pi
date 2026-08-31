@@ -77,7 +77,7 @@ scope: HPI package 0.6.0 implementation candidate; interaction-v1 + preserved ex
 | 自由文本伪装 DESIGN 可绕过机器事实 regex | human Gate 改为 projector-owned request binding；question/category echo 改写拒绝 | 中英 8 组 paraphrase、stale/missing request/digest/source 负向测试；Extension 正向 binding 测试 |
 | malformed/divergent outbox / duplicate logical IDs | outbox v2 完整 envelope/digest/receipt/timestamp 校验；same-event divergent digest 整组 quarantine；projector 前置唯一性 Gate | malformed envelope、candidate tamper、`[A,B]`/`[B,A]` conflict 等价、Pain/Design/Task/Result/Request duplicate |
 | Windows path、timestamp、Adapter hostile input | 新 execution v2 path schema；严格 RFC3339；有界 regular-file reader | drive/UNC/backslash/dot/control、date-only/no-zone/invalid date、symlink/intermediate-link/oversize/directory 负向测试 |
-| Validation attempt replay/recovery 被误当项目权威 | 独立 validation set/authority；隔离 store、完整五 Gate chain、one-Gate-one-fact MachineResult binding；restricted projector 保留正式 NOT-RUN | zero-write preview、store-only diff、exact replay、divergent conflict、retry new ID、ref TOCTOU、forged PASS、normal/crash fresh-process tests |
+| Validation attempt replay/recovery 被误当项目权威 | 独立 validation set/authority；隔离 store、完整五 Gate chain、one-Gate-one-fact MachineResult binding；runtime/status current result 与 restricted projector 在 base drift/unavailable 时 fail closed；正式 TS-001 保留 NOT-RUN | zero-write preview、store-only diff、current-result drift、exact replay、divergent conflict、retry success/non-latest/locked、workspace/authority expansion、snapshot cardinality、immutable conflict、ref TOCTOU、forged PASS、R-ICL rejection、Linux normal/crash fresh-process 与 Windows runtime tests |
 
 ## 5. 真实 R-ICL Adapter 读边界
 

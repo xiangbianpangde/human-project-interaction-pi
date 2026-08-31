@@ -61,7 +61,7 @@ describe("implementation documentation", () => {
   it("aligns the Node floor and cross-platform checkout with the pinned Pi runtime", () => {
     assert.equal(packageJson.engines.node, ">=22.19.0");
     assert.match(ci, /node: \[22\.19\.0, 22\.x\]/u);
-    assert.match(ci, /test:validation-contract/u);
+    assert.match(ci, /test:validation-runtime/u);
     assert.doesNotMatch(ci, /20\.x/u);
     assert.match(gitAttributes, /^\* text=auto eol=lf$/mu);
   });

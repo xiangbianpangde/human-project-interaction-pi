@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { RICL_V4_FILES } from "../src/adapters/ricl-v4.mjs";
 import { loadPiExtensions } from "./support/pi-runtime.mjs";
 import { buildValidationAttemptFixture } from "./support/validation-runtime-fixture.mjs";
 
@@ -27,6 +28,14 @@ function assertSnakeCaseKeys(value, path = "$") {
   for (const [key, child] of Object.entries(value)) {
     assert.doesNotMatch(key, /[A-Z]/u, `${path}.${key} must use snake_case`);
     assertSnakeCaseKeys(child, `${path}.${key}`);
+  }
+}
+
+function populateRiclDetectionFixture(root) {
+  for (const pointer of Object.values(RICL_V4_FILES)) {
+    const path = join(root, pointer);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, "read-only R-ICL adapter fixture\n", "utf8");
   }
 }
 
@@ -146,6 +155,41 @@ describe("Pi lifecycle and query", () => {
 });
 
 describe("Pi validation-runtime tool", () => {
+  it("fails closed before execution when the detected adapter is R-ICL rather than TS-001", async () => {
+    const root = mkdtempSync(join(tmpdir(), "hpi-extension-ricl-validation-"));
+    try {
+      populateRiclDetectionFixture(root);
+      const { extension } = await loadHpi();
+      const { ctx } = mockContext(root);
+      const hookResult = await extension.handlers.get("tool_call")[0](
+        {
+          type: "tool_call",
+          toolCallId: "ricl-validation",
+          toolName: "hpi_validation",
+          input: { op: "status", attemptId: "VRS1-RICL-FORBIDDEN" },
+        },
+        ctx,
+      );
+      assert.equal(hookResult.block, true);
+      assert.match(hookResult.reason, /supports only ts001-pilot\/0\.1\.0/u);
+
+      const tool = extension.tools.get("hpi_validation").definition;
+      await assert.rejects(
+        () => tool.execute(
+          "ricl-validation-direct",
+          { op: "status", attemptId: "VRS1-RICL-FORBIDDEN" },
+          undefined,
+          undefined,
+          ctx,
+        ),
+        /requires ts001-pilot\/0\.1\.0/u,
+      );
+      assert.equal(existsSync(join(root, ".pi", "artifacts", "hpi-validation")), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("previews and runs only the explicit machine-only attempt without session or canonical authority", async () => {
     const root = mkdtempSync(join(tmpdir(), "hpi-extension-validation-"));
     try {

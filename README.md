@@ -103,7 +103,7 @@ talk/styles/hpi-project/              /talk html-js style pack
 tests/                                单元、wire fixtures、负向、恢复、loader、style、安装测试
 tests/integration/                    显式真实项目只读集成
 scripts/                              可逆安装与 Skill 校验入口
-.github/workflows/ci.yml               Linux Node 22.19/latest + Windows execution/validation contract CI
+.github/workflows/ci.yml               Linux Node 22.19/latest + Windows execution/validation runtime CI
 ```
 
 安装使用符号链接，不复制 Skill、Extension 或 style，因此只有一份源树。
@@ -164,7 +164,7 @@ hpi_validation(op="run", manifestPath=".pi/validation-inputs/<manifest>.json")
 hpi_validation(op="status", attemptId="<attempt-id>")
 ```
 
-先 preview 再 run。preview 零写入；run 只写 attempt 专属隔离根。相同 input 的 terminal replay 不追加；同 attempt ID 的 divergent input 返回 conflict；non-terminal history 只解释为 `INCOMPLETE_INTERRUPTED`，重试必须使用新 ID 与精确 `retry_of`。该工具的 `PASS-ENGINEERING` 只属于 V1 局部 Gate，不是正式 TS-001、P0、HumanResult 或 canonical 接受。
+先 preview 再 run。preview 零写入；run 只写 attempt 专属隔离根。相同 input 的 terminal replay 不追加；同 attempt ID 的 divergent input 返回 conflict；non-terminal history 只解释为 `INCOMPLETE_INTERRUPTED`，重试必须使用新 ID 与精确 `retry_of`。`runtime.machineResult` / status 顶层 `machineResult` 始终按当前 TS-001 read-only snapshot 重新限定；不可用时为 `null`，漂移时降为 `INCOMPLETE`。`history.machineResult` / `historicalMachineResult` 只是不可变历史，不得作为当前 PASS。该工具的 `PASS-ENGINEERING` 只属于 V1 局部 Gate，不是正式 TS-001、P0、HumanResult 或 canonical 接受。
 
 `hpi_propose(op="escalation")` 不再从任意自然语言 mint HumanEscalationRequest。候选必须绑定 projector 当前产生的 `requestId + requestDigest + sourceDigest`；regex 仅作为额外机器事实拒绝层。`talk_poll_events` 返回的 HPI 事件仍必须完整传给 `hpi_propose(op="ingest_talk_event")`。
 
@@ -210,6 +210,6 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 11. Adapter 与 validation intake 不跟随 symlink、不读取非普通或超限输入；ref SHA 必须等于原始 bytes；
 12. validation record 必须连续、内容寻址并完整绑定五个 Gate；PASS MachineResult 必须一 Gate 一 fact 且引用 immutable RUNNING record；
 13. exact replay 零追加；divergent attempt conflict；fresh process 中 non-terminal 永不恢复成完成，残留 lock 不自动夺取；
-14. store 外项目权威文件前后 SHA 不变；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并。
+14. store 外项目权威文件前后 SHA 不变；historical PASS 在 current-source 漂移/不可用时不得由 runtime 或投影显示为当前 PASS；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并。
 
 GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。当前 0.6 Validation Runtime Slice V1 仍需新的独立复审与 CI，且无论结果如何都不能据此宣称正式 TS-001、完整 P0、HumanResult 或 canonical 接受。

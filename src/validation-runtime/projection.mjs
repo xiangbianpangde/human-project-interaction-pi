@@ -148,16 +148,31 @@ function runtimeSourceRefs(history) {
   ];
 }
 
-export function normalizeValidationAttemptProjection(projectRoot, attemptId) {
+export function resolveValidationMachineResultForCurrentBase(projectRoot, history) {
   const base = loadTs001Pilot(projectRoot);
+  const historicalMachineResult = history.machineResult ?? syntheticMachineResult(history);
+  const currentBaseDrifted = Boolean(
+    history.machineResult && !resultMatchesCurrentBase(history.machineResult, base),
+  );
+  const validationMachineResult = currentBaseDrifted
+    ? staleMachineResult(history, history.machineResult, base)
+    : historicalMachineResult;
+  return {
+    baseSource: base,
+    historicalMachineResult,
+    validationMachineResult,
+    currentBaseDrifted,
+  };
+}
+
+export function normalizeValidationAttemptProjection(projectRoot, attemptId) {
   const history = readValidationAttemptHistory(projectRoot, attemptId);
   if (history.kind === "NOT_FOUND" || history.kind === "EMPTY") {
     fail(`validation attempt ${attemptId} has no projectable immutable history`, { history });
   }
-  const historicalResult = history.machineResult ?? syntheticMachineResult(history);
-  const result = history.machineResult && !resultMatchesCurrentBase(history.machineResult, base)
-    ? staleMachineResult(history, history.machineResult, base)
-    : historicalResult;
+  const resolved = resolveValidationMachineResultForCurrentBase(projectRoot, history);
+  const base = resolved.baseSource;
+  const result = resolved.validationMachineResult;
   const sourceSnapshot = [...base.sourceSnapshot, ...runtimeSourceRefs(history)];
   const sourceDigest = computeSourceDigest(VALIDATION_PROJECTION_ADAPTER, sourceSnapshot);
   const primaryResultRef = history.terminal?.machineResultRef ?? latestEvidenceRef(history);

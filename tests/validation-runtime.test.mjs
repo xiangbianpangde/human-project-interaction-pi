@@ -18,14 +18,22 @@ import { fileURLToPath } from "node:url";
 import { TS001_FILES } from "../src/adapter.mjs";
 import { sealRecord } from "../src/execution/contract.mjs";
 import { rebuildTs001Projection } from "../src/projector.mjs";
-import { sha256Bytes } from "../src/validation-runtime/contract.mjs";
-import { previewValidationAttempt } from "../src/validation-runtime/intake.mjs";
+import {
+  VALIDATION_STORE_PREFIX,
+  sha256Bytes,
+} from "../src/validation-runtime/contract.mjs";
+import {
+  evaluateValidationAttemptGates,
+  previewValidationAttempt,
+  readValidationAttemptInput,
+} from "../src/validation-runtime/intake.mjs";
 import { runAndProjectValidationAttempt } from "../src/validation-runtime.mjs";
 import { buildValidationAttemptProjection } from "../src/validation-runtime/projection.mjs";
 import {
   getValidationAttemptStatus,
   runValidationAttempt,
 } from "../src/validation-runtime/runtime.mjs";
+import { acquireValidationAttemptLock } from "../src/validation-runtime/store.mjs";
 import { buildValidationAttemptFixture, validationStoreRoot } from "./support/validation-runtime-fixture.mjs";
 
 const childScript = fileURLToPath(new URL("./support/validation-runtime-child.mjs", import.meta.url));
@@ -153,11 +161,52 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
       const completed = runValidationAttempt(root, fixture.manifestPointer);
       assert.equal(completed.machineResult.verdict, "PASS-ENGINEERING");
       appendFileSync(join(root, TS001_FILES.technicalDesign), "\ncurrent source drift after terminal\n", "utf8");
+      const storeFiles = projectFiles(validationStoreRoot(root, fixture.wire.validation_attempt_id));
+      const replay = runValidationAttempt(root, fixture.manifestPointer);
+      assert.equal(replay.kind, "EXACT_REPLAY");
+      assert.equal(replay.machineResult.verdict, "INCOMPLETE");
+      assert.equal(replay.historicalMachineResult.verdict, "PASS-ENGINEERING");
+      assert.equal(replay.currentBaseAvailable, true);
+      assert.equal(replay.currentBaseDrifted, true);
+      assert.deepEqual(projectFiles(validationStoreRoot(root, fixture.wire.validation_attempt_id)), storeFiles);
+
+      const status = getValidationAttemptStatus(root, fixture.wire.validation_attempt_id);
+      assert.equal(status.machineResult.verdict, "INCOMPLETE");
+      assert.equal(status.history.machineResult.verdict, "PASS-ENGINEERING");
+      assert.equal(status.currentBaseDrifted, true);
+
       const projected = buildValidationAttemptProjection(root, fixture.wire.validation_attempt_id);
       assert.equal(projected.history.machineResult.verdict, "PASS-ENGINEERING");
       assert.equal(projected.validationMachineResult.verdict, "INCOMPLETE");
       assert.equal(projected.projection.hps.activeWork[0].machineStatus, "INCOMPLETE");
       assert.match(projected.validationMachineResult.facts[0].statement, /different TS-001 source revision/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("never returns a historical PASS as current when the base adapter becomes unavailable", () => {
+    const root = temporaryRoot();
+    try {
+      const fixture = buildValidationAttemptFixture(root, { attemptId: "VRS1-CURRENT-BASE-UNAVAILABLE" });
+      const completed = runValidationAttempt(root, fixture.manifestPointer);
+      assert.equal(completed.machineResult.verdict, "PASS-ENGINEERING");
+      const contractPath = join(root, TS001_FILES.contract);
+      const unavailable = readFileSync(contractPath, "utf8").replace("test_status: NOT-RUN", "test_status: PASS");
+      writeFileSync(contractPath, unavailable, "utf8");
+
+      const replay = runValidationAttempt(root, fixture.manifestPointer);
+      assert.equal(replay.kind, "EXACT_REPLAY");
+      assert.equal(replay.machineResult, null);
+      assert.equal(replay.historicalMachineResult.verdict, "PASS-ENGINEERING");
+      assert.equal(replay.currentBaseAvailable, false);
+      assert.equal(replay.currentBaseDrifted, true);
+      assert.match(replay.currentBaseError, /requires authoritative test_status NOT-RUN/u);
+
+      const status = getValidationAttemptStatus(root, fixture.wire.validation_attempt_id);
+      assert.equal(status.machineResult, null);
+      assert.equal(status.history.machineResult.verdict, "PASS-ENGINEERING");
+      assert.equal(status.currentBaseAvailable, false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -178,6 +227,105 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
       );
       assert.equal(existsSync(validationStoreRoot(root, fixture.wire.validation_attempt_id)), false);
     } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed on store-sourced manifests and workspace or authority expansion", () => {
+    const root = temporaryRoot();
+    try {
+      assert.throws(
+        () => previewValidationAttempt(root, `${VALIDATION_STORE_PREFIX}/UNTRUSTED/input.json`),
+        /MANIFEST_INSIDE_STORE/u,
+      );
+
+      const fixture = buildValidationAttemptFixture(root, { attemptId: "VRS1-GATE-NEGATIVE" });
+      const intake = readValidationAttemptInput(root, fixture.manifestPointer);
+      const cases = [
+        {
+          expectedGate: "V1_WORKSPACE",
+          expectedCode: "WORKSPACE_READ_WRITE_OVERLAP",
+          mutate(input) {
+            input.declaredReadSet.push(`${VALIDATION_STORE_PREFIX}/foreign/records/receipt.json`);
+          },
+        },
+        {
+          expectedGate: "V1_WORKSPACE",
+          expectedCode: "WORKSPACE_NETWORK",
+          mutate(input) {
+            input.authority.network = "ALLOW";
+          },
+        },
+        {
+          expectedGate: "V1_AUTHORITY",
+          expectedCode: "AUTHORITY_EXPANSION",
+          mutate(input) {
+            input.authority.projectCanonicalWrite = "ALLOWED";
+          },
+        },
+      ];
+      for (const testCase of cases) {
+        const candidate = { ...intake, input: structuredClone(intake.input) };
+        testCase.mutate(candidate.input);
+        const evaluated = evaluateValidationAttemptGates(root, candidate);
+        assert.equal(evaluated.accepted, false);
+        const failed = evaluated.gateOutcomes.find((outcome) => outcome.status === "FAILED");
+        assert.equal(failed.gate, testCase.expectedGate);
+        assert.equal(failed.code, testCase.expectedCode);
+      }
+      assert.equal(existsSync(validationStoreRoot(root, fixture.wire.validation_attempt_id)), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects retry refs bound to a successful, non-latest, or locked prior attempt", () => {
+    const root = temporaryRoot();
+    let lock;
+    try {
+      const succeeded = buildValidationAttemptFixture(root, { attemptId: "VRS1-RETRY-SUCCEEDED" });
+      const successful = runValidationAttempt(root, succeeded.manifestPointer);
+      const afterSuccess = buildValidationAttemptFixture(root, {
+        attemptId: "VRS1-RETRY-AFTER-SUCCESS",
+        retryOf: successful.history.recordRefs.at(-1),
+      });
+      const succeededPreview = previewValidationAttempt(root, afterSuccess.manifestPointer);
+      assert.equal(succeededPreview.accepted, false);
+      assert.equal(
+        succeededPreview.gateOutcomes.find((outcome) => outcome.gate === "V1_IDENTITY").code,
+        "RETRY_PRIOR_SUCCEEDED",
+      );
+
+      const partial = buildValidationAttemptFixture(root, { attemptId: "VRS1-RETRY-PARTIAL" });
+      const interrupted = runValidationAttempt(root, partial.manifestPointer, {
+        testOnlyStopAfterPhase: "RUNNING",
+      });
+      const nonLatest = buildValidationAttemptFixture(root, {
+        attemptId: "VRS1-RETRY-NON-LATEST",
+        retryOf: interrupted.history.recordRefs[1],
+      });
+      const nonLatestPreview = previewValidationAttempt(root, nonLatest.manifestPointer);
+      assert.equal(nonLatestPreview.accepted, false);
+      assert.equal(
+        nonLatestPreview.gateOutcomes.find((outcome) => outcome.gate === "V1_IDENTITY").code,
+        "RETRY_PRIOR_NOT_LATEST",
+      );
+
+      lock = acquireValidationAttemptLock(root, partial.wire.validation_attempt_id, {
+        invocation_id: "test-stale-prior-lock",
+      });
+      const locked = buildValidationAttemptFixture(root, {
+        attemptId: "VRS1-RETRY-LOCKED",
+        retryOf: interrupted.history.recordRefs.at(-1),
+      });
+      const lockedPreview = previewValidationAttempt(root, locked.manifestPointer);
+      assert.equal(lockedPreview.accepted, false);
+      assert.equal(
+        lockedPreview.gateOutcomes.find((outcome) => outcome.gate === "V1_IDENTITY").code,
+        "RETRY_PRIOR_LOCKED",
+      );
+    } finally {
+      lock?.release();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -266,7 +414,8 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
       });
       assert.equal(result.kind, "MACHINE_RESULT_PRODUCED");
       assert.equal(result.machineResult.verdict, "INCOMPLETE");
-      assert.equal(result.machineResult.facts.some((fact) => fact.status === "FAILED"), true);
+      assert.equal(result.currentBaseDrifted, true);
+      assert.equal(result.historicalMachineResult.facts.some((fact) => fact.status === "FAILED"), true);
       assert.equal(result.history.terminal.outcome, "MACHINE_RESULT_PRODUCED");
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -293,7 +442,9 @@ describe("fresh-process recovery semantics", () => {
     }
   });
 
-  it("preserves a crash lock and refuses stale-lock reclaim in a fresh process", () => {
+  it("preserves a crash lock and refuses stale-lock reclaim in a fresh process", {
+    skip: process.platform === "win32" ? "POSIX SIGKILL semantics are not portable to Windows" : false,
+  }, () => {
     const root = temporaryRoot();
     try {
       const fixture = buildValidationAttemptFixture(root, { attemptId: "VRS1-FRESH-CRASH" });

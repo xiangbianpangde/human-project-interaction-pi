@@ -90,6 +90,7 @@ Do not create or discover a manifest from chat, prose, drafts, or adjacent files
 
 - `hpi_validation(op="preview")` must be used before `run`; preview writes nothing.
 - `run` may append only the isolated attempt ledger and returns a scoped MachineResult.
+- Use only the runtime/status top-level `machineResult` as the current result. `history.machineResult` and `historicalMachineResult` are immutable history; current-source drift lowers the top-level result to `INCOMPLETE`, and an unavailable current base makes it `null`.
 - `status` reads one explicit attempt ID; non-terminal history is `INCOMPLETE_INTERRUPTED`, never successful completion.
 - Exact terminal replay appends nothing. Divergent input under the same attempt ID is a conflict. Retry requires a new attempt ID and exact `retry_of` latest-record binding.
 - Always say “validation-runtime-v1 局部结果”; if local PASS is shown, state in the same sentence that formal TS-001 remains NOT-RUN and no independent Validation Agent ran.

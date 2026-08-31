@@ -58,6 +58,7 @@ export {
   ValidationRuntimeProjectionError,
   buildValidationAttemptProjection,
   normalizeValidationAttemptProjection,
+  resolveValidationMachineResultForCurrentBase,
 } from "./validation-runtime/projection.mjs";
 
 import { buildValidationAttemptProjection } from "./validation-runtime/projection.mjs";
