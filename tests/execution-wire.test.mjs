@@ -431,6 +431,46 @@ describe("execution wire codecs and cross-field gates", () => {
     assert.equal(validation.valid, true, JSON.stringify(validation.errors));
     assert.equal(pass.attempt_ref.revision, runningAttempt.attempt_revision);
 
+    const contradictoryFact = {
+      id: "FACT-FIXTURE-FAILED",
+      kind: "TEST",
+      statement: "A critical acceptance test failed.",
+      status: "FAILED",
+      evidenceRefs: [],
+    };
+    assert.throws(
+      () =>
+        toWireResultBundle({
+          ...structuredClone(inputs.resultInput),
+          attemptRecord: runningAttempt,
+          machineResult: {
+            ...structuredClone(passMachineResult),
+            facts: [...structuredClone(passMachineResult.facts), contradictoryFact],
+          },
+          evidenceRecords: [verifiedEvidence],
+          failure: { kind: "NONE", summary: "", retryable: false },
+          unresolved: [],
+          nextAttempt: null,
+        }),
+      /requires every fact status to be VERIFIED/,
+    );
+    const contradictoryWire = structuredClone(pass);
+    contradictoryWire.machine_result.facts.push({
+      fact_id: contradictoryFact.id,
+      kind: contradictoryFact.kind,
+      statement: contradictoryFact.statement,
+      status: contradictoryFact.status,
+      evidence_refs: [],
+    });
+    const contradictoryValidation = validateFixture(createAjv(), "result_bundle", contradictoryWire);
+    assert.equal(contradictoryValidation.valid, false);
+    assert.ok(
+      contradictoryValidation.errors.some(
+        (error) => error.instancePath.endsWith("/status") && error.keyword === "const",
+      ),
+      JSON.stringify(contradictoryValidation.errors),
+    );
+
     const terminalAttempt = toWireAttempt({
       ...structuredClone(inputs.attemptInput),
       status: "SUCCEEDED",
@@ -560,6 +600,35 @@ describe("execution wire codecs and cross-field gates", () => {
         /must exactly resolve to a carried Evidence id, revision, and sha256/,
       );
     }
+
+    const unrelatedClaimEvidence = toWireEvidence({
+      ...structuredClone(fixture.inputs.evidenceInput),
+      status: "HARNESS_VERIFIED",
+      claimRefs: ["FACT-UNRELATED"],
+      verifiedBy: [
+        {
+          agentId: "agent-validation",
+          role: "VALIDATION",
+          harnessRevision: "harness/fixture",
+        },
+      ],
+    });
+    const unrelatedClaimRef = wireRecordRef(unrelatedClaimEvidence, {
+      idKey: "evidence_id",
+      revisionKey: "evidence_revision",
+    });
+    assert.throws(
+      () =>
+        toWireResultBundle({
+          ...structuredClone(passInput),
+          machineResult: {
+            ...structuredClone(passInput.machineResult),
+            facts: [{ ...passInput.machineResult.facts[0], evidenceRefs: [unrelatedClaimRef] }],
+          },
+          evidenceRecords: [unrelatedClaimEvidence],
+        }),
+      /claim_refs must include the referenced fact_id/,
+    );
 
     const selfReported = toWireEvidence({
       ...structuredClone(fixture.inputs.evidenceInput),

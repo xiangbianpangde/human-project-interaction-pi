@@ -5,7 +5,8 @@
 - Require the preserved execution-v1 → current execution-v2 schema lineage during project re-entry.
 - Require all human escalation proposals to bind a current projector-owned request id, request digest, and source digest; free-form model prose cannot mint a human question.
 - Preserve machine-fact regex detection only as defence-in-depth and keep untrusted/tampered requests non-human.
-- Restore only session-outbox v2 entries whose exact envelope, candidate digest, and receipt binding verify; quarantine malformed entries independently.
+- Restore only session-outbox v2 entries whose exact envelope, candidate digest, and receipt binding verify; quarantine malformed entries independently and reject same-event-id divergent candidate content deterministically.
+- Require execution-v2 PASS facts to be non-empty/all-VERIFIED and bind each referenced Evidence `claim_refs` to the exact fact id.
 - Report execution v2 metadata without implying Bundle intake, Result commit, HumanResult, or canonical mutation.
 
 ## 0.4.0 - 2026-08-30

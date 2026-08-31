@@ -142,6 +142,27 @@
       },
       "then": {
         "properties": {
+          "machine_result": {
+            "type": "object",
+            "properties": {
+              "facts": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "status"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "VERIFIED"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "evidence": {
             "type": "array",
             "minItems": 1,
@@ -197,5 +218,5 @@
       }
     }
   ],
-  "$comment": "Cross-record gates must compare Evidence and Task frozen identities by id + revision + sha256. PASS trust must come from Evidence directly referenced by a VERIFIED fact."
+  "$comment": "Cross-record gates must compare Evidence and Task frozen identities by id + revision + sha256. Every PASS fact must be VERIFIED, and each referenced Evidence claim_refs must name that exact fact_id before its trust status can confer PASS."
 }

@@ -242,7 +242,9 @@ export function validateMachineResult(value, path = "machineResult") {
   stringAt(object.attemptId, `${path}.attemptId`);
   validateSourceRef(object.sourceRef, `${path}.sourceRef`);
   enumAt(object.verdict, MACHINE_VERDICTS, `${path}.verdict`);
-  arrayAt(object.facts, `${path}.facts`).forEach((fact, index) => {
+  const facts = arrayAt(object.facts, `${path}.facts`);
+  const factIds = new Set();
+  facts.forEach((fact, index) => {
     const factPath = `${path}.facts[${index}]`;
     const item = exactKeys(
       fact,
@@ -251,6 +253,8 @@ export function validateMachineResult(value, path = "machineResult") {
       factPath,
     );
     stringAt(item.id, `${factPath}.id`);
+    if (factIds.has(item.id)) fail(`${factPath}.id`, "must be unique inside one MachineResult");
+    factIds.add(item.id);
     enumAt(item.kind, FACT_KINDS, `${factPath}.kind`);
     stringAt(item.statement, `${factPath}.statement`);
     enumAt(item.status, FACT_STATUSES, `${factPath}.status`);
@@ -259,6 +263,16 @@ export function validateMachineResult(value, path = "machineResult") {
       fail(`${factPath}.evidenceRefs`, "VERIFIED facts require at least one evidence ref");
     }
   });
+  if (object.verdict === "PASS-ENGINEERING") {
+    if (facts.length === 0) fail(`${path}.facts`, "PASS-ENGINEERING requires at least one fact");
+    const contradictoryIndex = facts.findIndex((fact) => fact.status !== "VERIFIED");
+    if (contradictoryIndex >= 0) {
+      fail(
+        `${path}.facts[${contradictoryIndex}].status`,
+        "PASS-ENGINEERING requires every fact status to be VERIFIED",
+      );
+    }
+  }
   stringsAt(object.limitations, `${path}.limitations`);
   stringsAt(object.unresolved, `${path}.unresolved`);
   return value;
@@ -496,8 +510,11 @@ export function deriveMachineVerdict({ authoritativeVerdict, claimedVerdict, fac
   if (authoritativeVerdict !== "PASS-ENGINEERING") return authoritativeVerdict;
   if (claimedVerdict !== "PASS-ENGINEERING") return "INCOMPLETE";
 
-  const hasVerifiedEvidence = facts.some(
-    (fact) => fact?.status === "VERIFIED" && Array.isArray(fact.evidenceRefs) && fact.evidenceRefs.length > 0,
-  );
-  return hasVerifiedEvidence ? "PASS-ENGINEERING" : "INCOMPLETE";
+  const factSet = arrayAt(facts, "facts");
+  const coherentVerifiedEvidence =
+    factSet.length > 0 &&
+    factSet.every(
+      (fact) => fact?.status === "VERIFIED" && Array.isArray(fact.evidenceRefs) && fact.evidenceRefs.length > 0,
+    );
+  return coherentVerifiedEvidence ? "PASS-ENGINEERING" : "INCOMPLETE";
 }

@@ -17,7 +17,7 @@ The immutable JSON Schema 2020-12 lineage uses snake_case-only external keys:
 2. `hpi/wire/execution/v1` is the preserved 0.4 execution contract.
 3. `hpi/wire/execution/v2` is the current execution contract; its manifest pins the exact interaction-v1 and execution-v1 set digests.
 
-v2 supersedes rather than edits v1. It defines host-independent POSIX scoped paths; its deterministic companion validator requires full `id + revision + sha256` Task/Evidence identity, direct high-trust Evidence for each VERIFIED PASS fact, duplicate Evidence-id rejection, and complete-ledger conflict checks before replay classification.
+v2 supersedes rather than edits v1. It defines host-independent POSIX scoped paths; its deterministic companion validator requires full `id + revision + sha256` Task/Evidence identity, `claim_refs` binding to the exact fact, a non-empty all-VERIFIED PASS fact set with direct high-trust Evidence, duplicate fact/Evidence-id rejection, and complete-ledger conflict checks before replay classification.
 
 The camelCase objects inside the Pi runtime are an internal profile; only `src/wire.mjs` / `src/execution.mjs` codecs may export them. Each manifest pins every schema SHA and complete set digest. Missing files, byte drift, dependency drift, mixed casing, or a digest mismatch fail closed before projection/query.
 
@@ -149,7 +149,7 @@ The extension appends custom entries with:
 - authority `SESSION_ONLY_NOT_PROJECT_CANONICAL`;
 - transport status `PENDING_CANONICAL_WRITER`.
 
-The outbox preserves valid candidate receipts across resume. Recovery validates the complete envelope, canonical UTC timestamps, adapter version, candidate id, full candidate digest, allowed fields, and the receipt-plus-candidate hash; one malformed entry is quarantined without discarding later valid entries. It does not participate in HPS projection and cannot establish HumanResult. Source digest drift marks previous candidates `STALE`.
+The outbox preserves valid candidate receipts across resume. Recovery validates the complete envelope, canonical UTC timestamps, adapter version, candidate id, full candidate digest, allowed fields, and the receipt-plus-candidate hash. Same event id with divergent candidate digests yields deterministic `CANDIDATE_IDENTITY_CONFLICT` and restores neither candidate; one malformed entry is quarantined without discarding unrelated valid entries. It does not participate in HPS projection and cannot establish HumanResult. Source digest drift marks previous candidates `STALE`.
 
 ## R-ICL v4 invariant
 

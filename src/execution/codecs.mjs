@@ -505,6 +505,12 @@ export function toWireResultBundle(value) {
       if (!record) {
         fail(path, "must exactly resolve to a carried Evidence id, revision, and sha256");
       }
+      if (!record.claim_refs.includes(fact.fact_id)) {
+        fail(
+          path,
+          `resolved Evidence claim_refs must include the referenced fact_id ${fact.fact_id}`,
+        );
+      }
       if (trustedStatuses.has(record.status)) hasTrustedEvidence = true;
     }
     if (

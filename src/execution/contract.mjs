@@ -1,6 +1,6 @@
 import { sha256, validateSourceRef } from "../contracts.mjs";
 
-export const EXECUTION_WIRE_CODEC_VERSION = "hpi-execution-wire-codec/2.0.0";
+export const EXECUTION_WIRE_CODEC_VERSION = "hpi-execution-wire-codec/2.1.0";
 
 export const EXECUTION_WIRE_OBJECT_SCHEMAS = Object.freeze({
   task_slice: "urn:hpi:wire:task-slice:v2",

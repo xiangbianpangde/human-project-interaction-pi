@@ -53,8 +53,9 @@ JSON Schema 校验单对象形状；`src/execution/` 负责无法由 JSON Schema
 - frozen identity 等于 `id + revision + sha256`，pointer 不参与身份；
 - Evidence 的 Task ref 必须精确匹配 ResultBundle Task revision；
 - MachineResult 的每个 Evidence ref 必须精确解析到 bundle 携带的一条 Evidence revision；
-- `PASS-ENGINEERING` 的 VERIFIED fact 必须**直接**引用 `HARNESS_VERIFIED` 或 `INDEPENDENTLY_VALIDATED` Evidence；
-- 相同 `evidence_id` 的多个 revision 在一个 bundle 内视为歧义并拒绝；
+- 每条 Evidence ref 的 `claim_refs` 必须包含引用它的精确 `fact_id`；
+- `PASS-ENGINEERING` 必须有非空、全部为 VERIFIED 的事实集，且每个 fact **直接**引用 `HARNESS_VERIFIED` 或 `INDEPENDENTLY_VALIDATED` Evidence；
+- 重复 `fact_id` 或相同 `evidence_id` 的多个 revision 视为歧义并拒绝；
 - classifier 在判断 candidate replay 前先检查完整 existing ledger；same-key 或 same-ID divergent revisions 与数组顺序无关地 fail closed；
 - codec timestamp 采用带显式 timezone 的严格 RFC3339；任何 codec 成功对象必须通过当前 frozen schema；
 - scoped path 采用 host-independent POSIX project-relative grammar，拒绝 backslash、drive/UNC、control chars、空 segment、`.` 和 `..`。
@@ -77,7 +78,7 @@ Schema 单独通过不等于这些跨对象 Gate 已通过。
 - `tests/fixtures/execution-wire-contract/`：保留的 execution v1 fixture；
 - `tests/fixtures/execution-wire-contract-v2/`：当前 execution v2 fixture；
 - `tests/wire-contract.test.mjs`：interaction schemas/hash/codec；
-- `tests/execution-wire.test.mjs`：v1 历史保留、v2 strict compile、dependency/hash tamper、完整 Evidence binding、ledger conflict、retry、stale、path 与 timestamp。
+- `tests/execution-wire.test.mjs`：v1 历史保留、v2 strict compile、dependency/hash tamper、完整 Evidence/claim binding、PASS coherence、ledger conflict、retry、stale、path 与 timestamp。
 
 所有 fixture authority 均为 `SYNTHETIC_TEST_ONLY_NOT_PROJECT_CANONICAL`。
 

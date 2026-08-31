@@ -122,23 +122,16 @@ export function restoreOutbox(entries, currentSourceDigest) {
   if (!/^[a-f0-9]{64}$/.test(currentSourceDigest ?? "")) {
     throw new SessionOutboxError("currentSourceDigest must be a SHA-256 digest");
   }
-  const byCandidate = new Map();
+  const grouped = new Map();
   const errors = [];
   for (const entry of entries) {
     if (!isCustomOutboxEntry(entry)) continue;
     try {
       const data = validateOutboxData(entry.data);
-      if (!byCandidate.has(data.candidate.eventId)) {
-        const freshness = candidateFreshness(data.candidate, currentSourceDigest);
-        byCandidate.set(data.candidate.eventId, {
-          entryId: entry.id,
-          receipt: data.receipt,
-          candidate: data.candidate,
-          freshness,
-          transportStatus: data.transportStatus,
-          authority: data.authority,
-        });
-      }
+      const eventId = data.candidate.eventId;
+      const records = grouped.get(eventId) ?? [];
+      records.push({ entryId: String(entry.id ?? ""), data });
+      grouped.set(eventId, records);
     } catch (error) {
       errors.push({
         entryId: entry?.id,
@@ -146,12 +139,53 @@ export function restoreOutbox(entries, currentSourceDigest) {
       });
     }
   }
-  const items = [...byCandidate.values()].sort((left, right) =>
-    left.receipt.recordedAt.localeCompare(right.receipt.recordedAt) ||
-    left.candidate.eventId.localeCompare(right.candidate.eventId),
+
+  const items = [];
+  for (const [candidateEventId, records] of [...grouped.entries()].sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    const candidateDigests = [...new Set(records.map((record) => record.data.candidateDigest))].sort();
+    if (candidateDigests.length > 1) {
+      const entryIds = records.map((record) => record.entryId).sort();
+      errors.push({
+        entryId: entryIds.join(","),
+        code: "CANDIDATE_IDENTITY_CONFLICT",
+        candidateEventId,
+        candidateDigests,
+        entryIds,
+        error: `CANDIDATE_IDENTITY_CONFLICT: ${candidateEventId} has divergent candidate digests`,
+      });
+      continue;
+    }
+    const selected = records.toSorted(
+      (left, right) =>
+        left.data.receipt.recordedAt.localeCompare(right.data.receipt.recordedAt) ||
+        left.data.receiptId.localeCompare(right.data.receiptId) ||
+        left.entryId.localeCompare(right.entryId),
+    )[0];
+    const data = selected.data;
+    const freshness = candidateFreshness(data.candidate, currentSourceDigest);
+    items.push({
+      entryId: selected.entryId,
+      receipt: data.receipt,
+      candidate: data.candidate,
+      freshness,
+      transportStatus: data.transportStatus,
+      authority: data.authority,
+    });
+  }
+  items.sort(
+    (left, right) =>
+      left.receipt.recordedAt.localeCompare(right.receipt.recordedAt) ||
+      left.candidate.eventId.localeCompare(right.candidate.eventId),
+  );
+  errors.sort(
+    (left, right) =>
+      String(left.entryId ?? "").localeCompare(String(right.entryId ?? "")) ||
+      left.error.localeCompare(right.error),
   );
   return {
-    schema: "hpi/restored-outbox/v1",
+    schema: "hpi/restored-outbox/v2",
     currentSourceDigest,
     items,
     current: items.filter((item) => item.freshness.status === "CURRENT"),

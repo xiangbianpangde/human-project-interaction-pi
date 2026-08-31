@@ -115,6 +115,47 @@ describe("source and machine contracts", () => {
     );
   });
 
+  it("requires unique facts and a non-empty all-VERIFIED fact set for PASS-ENGINEERING", () => {
+    const verifiedFact = {
+      id: "FACT-PASS-001",
+      kind: "TEST",
+      statement: "The acceptance test passed.",
+      status: "VERIFIED",
+      evidenceRefs: [sourceRef],
+    };
+    const result = {
+      schema: SCHEMAS.machineResult,
+      resultId: "MR-PASS-001",
+      taskId: "TS-PASS-001",
+      attemptId: "ATTEMPT-PASS-001",
+      sourceRef,
+      verdict: "PASS-ENGINEERING",
+      facts: [verifiedFact],
+      limitations: [],
+      unresolved: [],
+    };
+    assert.equal(validateMachineResult(result), result);
+    assert.throws(
+      () => validateMachineResult({ ...result, facts: [] }),
+      /requires at least one fact/,
+    );
+    for (const status of ["FAILED", "NOT_RUN", "INCOMPLETE", "SELF_REPORTED"]) {
+      assert.throws(
+        () =>
+          validateMachineResult({
+            ...result,
+            facts: [verifiedFact, { ...verifiedFact, id: `FACT-${status}`, status, evidenceRefs: [] }],
+          }),
+        /requires every fact status to be VERIFIED/,
+        status,
+      );
+    }
+    assert.throws(
+      () => validateMachineResult({ ...result, facts: [verifiedFact, { ...verifiedFact }] }),
+      /must be unique inside one MachineResult/,
+    );
+  });
+
   it("never lets claims or isolated evidence override a non-pass authoritative verdict", () => {
     for (const authoritativeVerdict of [
       "NOT-RUN",
@@ -144,14 +185,31 @@ describe("source and machine contracts", () => {
       }),
       "PASS-ENGINEERING",
     );
-    assert.equal(
-      deriveMachineVerdict({
-        authoritativeVerdict: "PASS-ENGINEERING",
-        claimedVerdict: "PASS-ENGINEERING",
-        facts: [{ status: "SELF_REPORTED", evidenceRefs: [] }],
-      }),
-      "INCOMPLETE",
-    );
+    for (const facts of [
+      [],
+      [{ status: "SELF_REPORTED", evidenceRefs: [] }],
+      [
+        { status: "VERIFIED", evidenceRefs: [sourceRef] },
+        { status: "FAILED", evidenceRefs: [] },
+      ],
+      [
+        { status: "VERIFIED", evidenceRefs: [sourceRef] },
+        { status: "NOT_RUN", evidenceRefs: [] },
+      ],
+      [
+        { status: "VERIFIED", evidenceRefs: [sourceRef] },
+        { status: "INCOMPLETE", evidenceRefs: [] },
+      ],
+    ]) {
+      assert.equal(
+        deriveMachineVerdict({
+          authoritativeVerdict: "PASS-ENGINEERING",
+          claimedVerdict: "PASS-ENGINEERING",
+          facts,
+        }),
+        "INCOMPLETE",
+      );
+    }
     assert.equal(
       deriveMachineVerdict({
         authoritativeVerdict: "PASS-ENGINEERING",

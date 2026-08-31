@@ -5,7 +5,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 ## 当前版本与冻结边界
 
 - **TS-001 Adapter `ts001-pilot/0.1.0`**：冻结的自包含试点，只读本目录三份材料；机器状态保持 `NOT-RUN`。
-- **Package `0.5.0`**：关闭独立审核发现的错误 PASS、幂等 ledger、Escalation Gate、恢复与路径合同缺口；保留 execution v1 历史字节并发布 `hpi/wire/execution/v2`。
+- **Package `0.5.0` candidate**：关闭两轮独立审核定位的 PASS provenance、幂等 ledger、Escalation Gate、恢复与路径合同缺口；保留 execution v1 历史字节并发布 `hpi/wire/execution/v2`。
 - **完整 P0：未关闭**。详见 [FR-001～FR-024 覆盖矩阵](HPI_FR_coverage_matrix.md)。
 
 已实现的试点能力：
@@ -21,8 +21,8 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 - `hpi/wire/v1`：六类交互对象的 JSON Schema 2020-12、hash manifest 和 synthetic 正/负 fixtures；
 - 历史 `hpi/wire/execution/v1`：原始 0.4.0 set 的 schema、manifest、fixture 和 digest 原样保留；
 - 当前 `hpi/wire/execution/v2`：修正跨平台 scoped path，并锁定 interaction v1 + execution v1 的完整 digest；
-- 完整 frozen Evidence identity、PASS 直接证据、全 ledger 幂等、retry 新 attempt 和保守 stale propagation 的纯函数；
-- projector-owned EscalationRequest binding、candidate-digest-bound outbox v2 隔离恢复、重复 logical ID 拒绝和有界 Adapter 读取；
+- 完整 frozen Evidence identity、`claim_refs ↔ fact_id`、全 VERIFIED PASS coherence、全 ledger 幂等、retry 和 stale preview；
+- projector-owned EscalationRequest binding、candidate-digest-bound outbox v2、同 event ID divergent-content 冲突隔离、重复 logical ID 拒绝和有界 Adapter 读取；
 - 自动测试、GitHub CI、严格 Skill 校验和可逆链接安装。
 
 明确未实现：
@@ -40,9 +40,9 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 
 1. `hpi/wire/v1`：交互对象；digest `1d08d1ac…264725`。
 2. `hpi/wire/execution/v1`：0.4.0 历史执行合同；digest `450698c6…9e88d1`，保持不可修改。
-3. `hpi/wire/execution/v2`：当前执行合同；digest `1f9a2e49…70d73a2`，manifest 同时锁定上述两个祖先 digest。
+3. `hpi/wire/execution/v2`：当前执行合同；digest `bccb3739…36439c`，manifest 同时锁定上述两个祖先 digest。
 
-v2 没有原地修补 v1。它修正 host-independent scoped path，并由 companion codec 强制 Evidence/Task 的 `id + revision + sha256` 精确闭合；PASS 的高信任 Evidence 必须由 VERIFIED fact 直接引用，不能靠无关旁挂证据获得。全 ledger 在 replay 分类前检查既存 same-key/same-ID divergent revisions，结果不再依赖数组顺序。
+v2 没有原地修补 v1。它修正 host-independent scoped path，并由 companion codec 强制 Evidence/Task 的 `id + revision + sha256` 精确闭合。每条 Evidence ref 的 `claim_refs` 必须包含引用它的 `fact_id`；`PASS-ENGINEERING` 要求非空且全部为 VERIFIED 的事实集，每个事实都直接引用高信任 Evidence。全 ledger 在 replay 分类前检查既存 same-key/same-ID divergent revisions，结果不再依赖数组顺序。
 
 当前 JavaScript camelCase 对象只是内部实现 profile，只能通过 `src/wire.mjs` / `src/execution.mjs` 的显式单向 codec 导出。所有 manifest 的 Inbound runtime 仍是 `not_implemented`。execution lifecycle 只做无副作用的 schema/内容 revision 校验、Result replay 分类、retry candidate 和 stale preview；它不会 dispatch Agent、append event、commit Result、修改下游状态或写 canonical。成功路径仍采用无环顺序：ResultBundle 先引用冻结的 `RUNNING` Attempt snapshot，随后 terminal Attempt 新 revision 才以 `supersedes` + `terminal_result_ref` 回指。
 
@@ -176,13 +176,13 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 2. `sourceDigest` 必须等于 Adapter + canonical source snapshot 的摘要；
 3. 任一 schema byte、manifest hash、set dependency 或 trust-anchor digest 漂移时 fail closed；
 4. 外部 wire 只接受 snake_case，混合 camelCase 键拒绝；
-5. PASS fact 的 Evidence 必须按完整 frozen identity 精确解析并直接具备高信任状态；无关旁挂 Evidence 不得授予 PASS；
+5. PASS facts 必须非空、全部 VERIFIED；Evidence 必须按完整 frozen identity 解析，`claim_refs` 包含精确 `fact_id`，并直接具备高信任状态；
 6. execution record revision 必须匹配内容；classifier 先检查完整 existing ledger，排序不能改变 conflict 结果；
 7. retry 必须创建新 attempt 并保留旧 terminal record；上游 revision 只传播 `STALE` / `NEEDS_REVIEW` preview；
 8. 任意自然语言不能绕过 projector-owned request binding 变成人类问题；
-9. outbox v2 将完整 candidate digest 绑定到 receipt；malformed entry 只隔离单条；duplicate logical ID 在投影前拒绝；
+9. outbox v2 将完整 candidate digest 绑定到 receipt；同 `eventId` 不同 digest 产生确定性 `CANDIDATE_IDENTITY_CONFLICT` 且不恢复任一候选；malformed entry 只隔离单条；
 10. scoped path 跨平台 fail closed，timestamp codec 成功的对象必须通过 frozen schema；
 11. Adapter 不跟随 symlink、不读取非普通或超限权威输入；
 12. `NOT-RUN` 不得显示为 PASS；Machine 与 Human 状态不得合并；HPI 不写项目 canonical。
 
-GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.4.0 baseline commit `9b46061` 被独立审核判定 BLOCK；0.5.0 是针对该报告的修复候选，仍需新的独立复核与 CI 结果，不能据此宣称完整 P0。
+GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.4.0 baseline `9b46061` 与首个 0.5 修复 commit `0fdaf17` 均被独立审核判定 BLOCK；当前 follow-up candidate 仍需新的独立复核与 CI 结果，不能据此宣称发布通过或完整 P0。

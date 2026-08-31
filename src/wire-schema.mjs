@@ -10,7 +10,7 @@ export const WIRE_SCHEMA_SET_DIGEST = "1d08d1acdda0cf05b29aae46949c900e49349eb21
 export const EXECUTION_WIRE_SCHEMA_SET_V1 = "hpi/wire/execution/v1";
 export const EXECUTION_WIRE_SCHEMA_SET_DIGEST_V1 = "450698c6e3218b3419f081dc47576f94edaea36ee0da6a97b35c80ef6d9e88d1";
 export const EXECUTION_WIRE_SCHEMA_SET = "hpi/wire/execution/v2";
-export const EXECUTION_WIRE_SCHEMA_SET_DIGEST = "1f9a2e495029baf1aec4e28c5cd6a0843ece88d586e4ae8330b3adfba70d73a2";
+export const EXECUTION_WIRE_SCHEMA_SET_DIGEST = "bccb373985dacfdff8eaa1c2f7001cb4644a1d4c931e5359ce4200f69836439c";
 
 const INTERACTION_MANIFEST_NAME = "manifest.v1.json";
 const EXECUTION_V1_MANIFEST_NAME = "manifest.v1.json";

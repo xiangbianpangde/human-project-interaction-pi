@@ -11,8 +11,9 @@ v2 also makes these executable semantic gates normative:
 
 - Task/Evidence references compare the full frozen identity: `id + revision + sha256`.
 - Every MachineResult Evidence ref must resolve to exactly one carried Evidence revision.
-- A `PASS-ENGINEERING` VERIFIED fact must directly reference `HARNESS_VERIFIED` or `INDEPENDENTLY_VALIDATED` Evidence; unrelated high-trust Evidence cannot confer PASS.
-- Duplicate logical Evidence ids inside one ResultBundle are rejected as ambiguous.
+- Every Evidence referenced by a MachineResult fact must list that exact `fact_id` in `claim_refs`.
+- `PASS-ENGINEERING` requires a non-empty fact set whose every status is `VERIFIED`; every fact must directly reference `HARNESS_VERIFIED` or `INDEPENDENTLY_VALIDATED` Evidence.
+- Duplicate logical fact or Evidence ids inside one ResultBundle are rejected as ambiguous.
 - Result idempotency checks the complete existing ledger before replay classification; pre-existing same-key divergent revisions fail closed independent of input order.
 - Timestamps accepted by codecs are strict RFC3339 date-times with explicit timezones.
 - Scoped paths use POSIX-style project-relative syntax and reject backslashes, drive/UNC roots, control characters, empty segments, and `.` / `..` segments.

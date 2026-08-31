@@ -46,7 +46,7 @@
       "name": "result_bundle",
       "id": "urn:hpi:wire:result-bundle:v2",
       "path": "result-bundle.v2.schema.json",
-      "sha256": "4dca0254346edd64f5eecdcffb72e75b6917d18552f4b8b41ba1724606712a75"
+      "sha256": "aafa52fda9f259d297483f0feb3afa9b3dc62716eb922cd622f5c380e450e253"
     },
     {
       "name": "stale_report",
@@ -61,5 +61,5 @@
       "sha256": "8c8a7e94582376c727bc875c747801716e614fcb3845c6d4e54d6cb66179f056"
     }
   ],
-  "schema_set_digest": "1f9a2e495029baf1aec4e28c5cd6a0843ece88d586e4ae8330b3adfba70d73a2"
+  "schema_set_digest": "bccb373985dacfdff8eaa1c2f7001cb4644a1d4c931e5359ce4200f69836439c"
 }

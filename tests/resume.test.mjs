@@ -60,6 +60,12 @@ describe("session-only candidate outbox", () => {
       [customEntry("entry-1", data), customEntry("entry-duplicate", data)],
       projection.sourceDigest,
     );
+    const reverse = restoreOutbox(
+      [customEntry("entry-duplicate", data), customEntry("entry-1", data)],
+      projection.sourceDigest,
+    );
+    assert.deepEqual(reverse, restored);
+    assert.equal(restored.schema, "hpi/restored-outbox/v2");
     assert.equal(restored.items.length, 1);
     assert.equal(restored.current.length, 1);
     assert.equal(restored.stale.length, 0);
@@ -73,6 +79,42 @@ describe("session-only candidate outbox", () => {
       canonicalCommitted: 0,
       boundary: "session candidate outbox only",
     });
+  });
+
+  it("quarantines same-event-id divergent candidates independent of session order", () => {
+    const firstCandidate = candidateResult("talk-event-conflict");
+    const secondCandidate = structuredClone(firstCandidate);
+    secondCandidate.payload = {
+      ...secondCandidate.payload,
+      action: "reject",
+      optionId: undefined,
+    };
+    delete secondCandidate.payload.optionId;
+    const first = createOutboxEntry(firstCandidate, { talkEventId: "receipt-a" });
+    const second = createOutboxEntry(secondCandidate, { talkEventId: "receipt-b" });
+
+    const forward = restoreOutbox(
+      [customEntry("entry-a", first), customEntry("entry-b", second)],
+      projection.sourceDigest,
+    );
+    const reverse = restoreOutbox(
+      [customEntry("entry-b", second), customEntry("entry-a", first)],
+      projection.sourceDigest,
+    );
+    for (const restored of [forward, reverse]) {
+      assert.equal(restored.items.length, 0);
+      assert.equal(restored.current.length, 0);
+      assert.equal(restored.stale.length, 0);
+      assert.equal(restored.errors.length, 1);
+      assert.equal(restored.errors[0].code, "CANDIDATE_IDENTITY_CONFLICT");
+      assert.equal(restored.errors[0].candidateEventId, firstCandidate.eventId);
+      assert.deepEqual(restored.errors[0].entryIds, ["entry-a", "entry-b"]);
+      assert.deepEqual(
+        restored.errors[0].candidateDigests,
+        [first.candidateDigest, second.candidateDigest].sort(),
+      );
+    }
+    assert.deepEqual(reverse, forward);
   });
 
   it("marks the old decision candidate stale after source changes", () => {
