@@ -61,7 +61,10 @@ describe("implementation documentation", () => {
   it("aligns the Node floor and cross-platform checkout with the pinned Pi runtime", () => {
     assert.equal(packageJson.engines.node, ">=22.19.0");
     assert.match(ci, /node: \[22\.19\.0, 22\.x\]/u);
+    assert.match(ci, /run: npm run verify/u);
     assert.match(ci, /test:validation-runtime/u);
+    assert.match(ci, /test:install/u);
+    assert.equal(packageJson.scripts["test:install"], "node --test tests/install.test.mjs");
     assert.doesNotMatch(ci, /20\.x/u);
     assert.match(gitAttributes, /^\* text=auto eol=lf$/mu);
   });
@@ -78,6 +81,9 @@ describe("implementation documentation", () => {
     assert.match(readme, /Inbound runtime.*`not_implemented`/u);
     assert.match(readme, /通用 execution lifecycle 仍只做无副作用 preview/u);
     assert.match(readme, /projector-owned/u);
+    assert.match(readme, /GitHub 公开仓库/u);
+    assert.match(readme, /新的 Pi process\/session/u);
+    assert.match(readme, /原子 quarantine/u);
     assert.doesNotMatch(readme, /\/Users\/xbpd\/Projects\/交互skills|\/opt\/homebrew/u);
   });
 });

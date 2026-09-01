@@ -30,11 +30,11 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
-      - name: Run deterministic test suite
-        run: npm test
+      - name: Run deterministic test suite and Skill validator
+        run: npm run verify
 
   windows-contract:
-    name: Execution + validation runtime / Windows
+    name: Execution + validation + installer / Windows
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -46,5 +46,5 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci
-      - name: Run cross-platform execution and validation runtime tests
-        run: npm run test:execution-wire && npm run test:validation-runtime
+      - name: Run cross-platform execution, validation runtime, and installer tests
+        run: npm run test:execution-wire && npm run test:validation-runtime && npm run test:install

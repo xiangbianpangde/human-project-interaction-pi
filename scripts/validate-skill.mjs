@@ -7,7 +7,7 @@ import { resolvePiAgentDir } from "../src/pi-paths.mjs";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const skillPath = join(packageRoot, "skills", "task", "human-project-interaction");
-const validator = join(
+const activeValidator = join(
   resolvePiAgentDir(),
   "skills",
   "task",
@@ -15,13 +15,34 @@ const validator = join(
   "scripts",
   "validate.py",
 );
+const bundledValidator = join(
+  packageRoot,
+  "scripts",
+  "vendor",
+  "skill-authoring-validator",
+  "validate.py",
+);
+const validator = existsSync(activeValidator) ? activeValidator : bundledValidator;
+const pinnedPiPackage = join(
+  packageRoot,
+  "node_modules",
+  "@earendil-works",
+  "pi-coding-agent",
+);
+const env = { ...process.env };
+if (!env.PI_CODING_AGENT_PACKAGE && existsSync(join(pinnedPiPackage, "dist", "index.js"))) {
+  env.PI_CODING_AGENT_PACKAGE = pinnedPiPackage;
+}
 
 if (!existsSync(validator)) {
-  console.error(`Governed Skill validator is unavailable: ${validator}`);
-  console.error("Install skill-authoring in PI_CODING_AGENT_DIR or set HPI_PI_AGENT_DIR for validation.");
+  console.error(`Governed Skill validator is unavailable: ${activeValidator}`);
+  console.error(`Bundled validator snapshot is unavailable: ${bundledValidator}`);
   process.exitCode = 1;
 } else {
-  const result = spawnSync("python3", [validator, "--strict", skillPath], { stdio: "inherit" });
+  const result = spawnSync("python3", [validator, "--strict", skillPath], {
+    env,
+    stdio: "inherit",
+  });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
 }

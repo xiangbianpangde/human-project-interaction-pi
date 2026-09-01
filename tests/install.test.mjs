@@ -1,11 +1,28 @@
 import assert from "node:assert/strict";
-import { lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, unlink } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  rm,
+  symlink,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { install, installationPlan, status, uninstall } from "../scripts/link-install.mjs";
+import {
+  install,
+  installationPlan,
+  status,
+  testOnlyInstallWithHooks,
+  testOnlyUninstallWithHooks,
+  uninstall,
+} from "../scripts/link-install.mjs";
 import { loadPiExtensions, resolvePiPackageRoot } from "./support/pi-runtime.mjs";
 
 const rootPath = fileURLToPath(new URL("..", import.meta.url));
@@ -17,33 +34,48 @@ async function temporaryAgentDir() {
   return join(root, "agent");
 }
 
+async function rejectedError(operation) {
+  try {
+    await operation();
+  } catch (error) {
+    return error;
+  }
+  assert.fail("operation unexpectedly succeeded");
+}
+
+async function assertMissing(path) {
+  await assert.rejects(lstat(path), (error) => error.code === "ENOENT");
+}
+
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 describe("Pi path resolution", () => {
-  it("locates the installed Pi package without a Homebrew-specific absolute import", () => {
-    assert.match(resolvePiPackageRoot(), /pi-coding-agent$/);
+  it("locates the pinned Pi package without a Homebrew-specific absolute import", () => {
+    const packageRoot = join(rootPath, "node_modules", "@earendil-works", "pi-coding-agent");
+    assert.equal(resolvePiPackageRoot({ packageRoot }), resolve(packageRoot));
   });
 
   it("honors Pi's documented config variable with explicit package overrides first", () => {
     const root = rootPath;
+    const skillSuffix = ["skills", "task", "human-project-interaction"];
     const target = (env) => installationPlan({ root, env })[0].target;
     assert.equal(
       target({ HPI_PI_AGENT_DIR: "/hpi", PI_CODING_AGENT_DIR: "/pi", PI_AGENT_DIR: "/legacy", HOME: "/home" }),
-      "/hpi/skills/task/human-project-interaction",
+      resolve("/hpi", ...skillSuffix),
     );
     assert.equal(
       target({ PI_CODING_AGENT_DIR: "/pi", PI_AGENT_DIR: "/legacy", HOME: "/home" }),
-      "/pi/skills/task/human-project-interaction",
+      resolve("/pi", ...skillSuffix),
     );
     assert.equal(
       target({ PI_AGENT_DIR: "/legacy", HOME: "/home" }),
-      "/legacy/skills/task/human-project-interaction",
+      resolve("/legacy", ...skillSuffix),
     );
     assert.equal(
       target({ HOME: "/home" }),
-      "/home/.pi/agent/skills/task/human-project-interaction",
+      resolve("/home", ".pi", "agent", ...skillSuffix),
     );
   });
 });
@@ -104,7 +136,7 @@ describe("reversible Pi link installation", () => {
     const other = join(agentDir, "other-extension");
     await mkdir(other, { recursive: true });
     await unlink(extension.target);
-    await symlink(other, extension.target, "dir");
+    await symlink(other, extension.target, process.platform === "win32" ? "junction" : "dir");
 
     await assert.rejects(
       uninstall({ root: rootPath, agentDir }),
@@ -112,5 +144,175 @@ describe("reversible Pi link installation", () => {
     );
     const states = await status({ root: rootPath, agentDir });
     assert.deepEqual(states.map((item) => item.state), ["linked", "conflict", "linked"]);
+  });
+
+  it("retains a regular file or foreign link substituted after uninstall preflight", async () => {
+    for (const replacement of ["file", "link"]) {
+      const agentDir = await temporaryAgentDir();
+      const linked = await install({ root: rootPath, agentDir });
+      const skill = linked.find((item) => item.id === "skill");
+      const foreignSource = join(agentDir, `foreign-${replacement}`);
+      if (replacement === "link") await mkdir(foreignSource, { recursive: true });
+
+      const error = await rejectedError(() => testOnlyUninstallWithHooks(
+        { root: rootPath, agentDir },
+        {
+          beforeRemoval: async ({ item }) => {
+            if (item.id !== "skill") return;
+            await unlink(item.target);
+            if (replacement === "file") {
+              await writeFile(item.target, "foreign regular file\n", "utf8");
+            } else {
+              await symlink(
+                foreignSource,
+                item.target,
+                process.platform === "win32" ? "junction" : "dir",
+              );
+            }
+          },
+        },
+      ));
+
+      assert.equal(error.code, "HPI_INSTALL_OWNERSHIP_LOST");
+      assert.equal(error.details.itemId, "skill");
+      assert.match(error.details.quarantinePath, /\.hpi-quarantine-/u);
+      await assertMissing(skill.target);
+      if (replacement === "file") {
+        assert.equal(await readFile(error.details.quarantinePath, "utf8"), "foreign regular file\n");
+      } else {
+        assert.equal((await lstat(error.details.quarantinePath)).isSymbolicLink(), true);
+        assert.equal(
+          resolve(dirname(error.details.quarantinePath), await readlink(error.details.quarantinePath)),
+          foreignSource,
+        );
+      }
+      const states = await status({ root: rootPath, agentDir });
+      assert.deepEqual(states.map((item) => item.state), ["missing", "linked", "linked"]);
+    }
+  });
+
+  it("rechecks the random quarantine immediately before deleting it", async () => {
+    const agentDir = await temporaryAgentDir();
+    const linked = await install({ root: rootPath, agentDir });
+    const skill = linked.find((item) => item.id === "skill");
+
+    const error = await rejectedError(() => testOnlyUninstallWithHooks(
+      { root: rootPath, agentDir },
+      {
+        beforeQuarantineUnlink: async ({ item, quarantinePath }) => {
+          if (item.id !== "skill") return;
+          await unlink(quarantinePath);
+          await writeFile(quarantinePath, "late foreign replacement\n", "utf8");
+        },
+      },
+    ));
+
+    assert.equal(error.code, "HPI_INSTALL_OWNERSHIP_LOST");
+    assert.equal(await readFile(error.details.quarantinePath, "utf8"), "late foreign replacement\n");
+    await assertMissing(skill.target);
+  });
+
+  it("removes only its managed links when a later install step fails", async () => {
+    const agentDir = await temporaryAgentDir();
+    const error = await rejectedError(() => testOnlyInstallWithHooks(
+      { root: rootPath, agentDir },
+      {
+        beforeCreate: ({ item }) => {
+          if (item.id === "extension") {
+            const injected = new Error("injected second-link failure");
+            injected.code = "HPI_INSTALL_TEST_FAILURE";
+            throw injected;
+          }
+        },
+      },
+    ));
+
+    assert.equal(error.code, "HPI_INSTALL_TEST_FAILURE");
+    assert.deepEqual(error.details.rollbackErrors, []);
+    const states = await status({ root: rootPath, agentDir });
+    assert.deepEqual(states.map((item) => item.state), ["missing", "missing", "missing"]);
+  });
+
+  it("uses ownership-preserving removal during install rollback", async () => {
+    const agentDir = await temporaryAgentDir();
+    const plan = installationPlan({ root: rootPath, agentDir });
+    const skill = plan.find((item) => item.id === "skill");
+
+    const error = await rejectedError(() => testOnlyInstallWithHooks(
+      { root: rootPath, agentDir },
+      {
+        beforeCreate: ({ item }) => {
+          if (item.id === "extension") {
+            const injected = new Error("injected second-link failure");
+            injected.code = "HPI_INSTALL_TEST_FAILURE";
+            throw injected;
+          }
+        },
+        beforeRollbackRemoval: async ({ item }) => {
+          if (item.id !== "skill") return;
+          await unlink(item.target);
+          await writeFile(item.target, "foreign rollback replacement\n", "utf8");
+        },
+      },
+    ));
+
+    assert.equal(error.code, "HPI_INSTALL_ROLLBACK_INCOMPLETE");
+    assert.equal(error.details.originalCode, "HPI_INSTALL_TEST_FAILURE");
+    assert.equal(error.details.rollbackErrors.length, 1);
+    const rollback = error.details.rollbackErrors[0];
+    assert.equal(rollback.itemId, "skill");
+    assert.equal(rollback.code, "HPI_INSTALL_OWNERSHIP_LOST");
+    assert.equal(await readFile(rollback.quarantinePath, "utf8"), "foreign rollback replacement\n");
+    await assertMissing(skill.target);
+    const states = await status({ root: rootPath, agentDir });
+    assert.deepEqual(states.map((item) => item.state), ["missing", "missing", "missing"]);
+  });
+
+  it("serializes cooperating installer mutations with a fail-closed lock", async () => {
+    const agentDir = await temporaryAgentDir();
+    const lockPath = join(agentDir, ".hpi-link-install.lock");
+    let enteredResolve;
+    let continueResolve;
+    const entered = new Promise((resolvePromise) => {
+      enteredResolve = resolvePromise;
+    });
+    const continueInstall = new Promise((resolvePromise) => {
+      continueResolve = resolvePromise;
+    });
+    const first = testOnlyInstallWithHooks(
+      { root: rootPath, agentDir },
+      {
+        beforeCreate: async ({ item }) => {
+          if (item.id !== "skill") return;
+          enteredResolve();
+          await continueInstall;
+        },
+      },
+    );
+    await entered;
+    try {
+      await assert.rejects(
+        install({ root: rootPath, agentDir }),
+        (error) => error.code === "HPI_INSTALL_LOCKED" && error.details.lockPath === lockPath,
+      );
+      assert.equal((await lstat(lockPath)).isDirectory(), true);
+    } finally {
+      continueResolve();
+    }
+    const states = await first;
+    assert.deepEqual(states.map((item) => item.state), ["linked", "linked", "linked"]);
+    await assertMissing(lockPath);
+  });
+
+  it("does not automatically reclaim a residual installer lock", async () => {
+    const agentDir = await temporaryAgentDir();
+    const lockPath = join(agentDir, ".hpi-link-install.lock");
+    await mkdir(lockPath, { recursive: true });
+
+    await assert.rejects(
+      install({ root: rootPath, agentDir }),
+      (error) => error.code === "HPI_INSTALL_LOCKED" && error.details.lockPath === lockPath,
+    );
+    assert.equal((await lstat(lockPath)).isDirectory(), true);
   });
 });

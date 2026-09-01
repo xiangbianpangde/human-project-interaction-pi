@@ -7,6 +7,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 - **TS-001 Adapter `ts001-pilot/0.1.0`**：冻结的自包含试点，只读本目录三份材料；机器状态保持 `NOT-RUN`。
 - **Package `0.5.0` 只读基线**：精确提交 `c79542b…` 经独立复审给出 RELEASE，并以 merge commit `5cbc57a…` 合入 `main`；TS-001 仍为 `NOT-RUN`。
 - **Package `0.6.0` Validation Runtime Slice V1**：Sol 对初始 merge tree 的 BLOCK 已由 corrective commit `cd64c07…` 关闭；同线程复审给出 VRS1-only RELEASE、无剩余 P1/P2，PR #5 以 merge commit `3bbbc42…` 合入 `main`，post-merge Linux/Windows CI 全绿。
+- **Package-level corrective candidate**：全仓 Sol 审核 job `2a80405f…` 保持 VRS1 RELEASE，但因 installer/uninstaller ownership TOCTOU 将整个 package 判为 BLOCK；Issue #7 的修复须经精确提交复审与 Linux/Windows CI 后才能清除。
 - **完整 P0：未关闭**。详见 [FR-001～FR-024 覆盖矩阵](HPI_FR_coverage_matrix.md)。
 
 已实现的试点能力：
@@ -103,7 +104,7 @@ talk/styles/hpi-project/              /talk html-js style pack
 tests/                                单元、wire fixtures、负向、恢复、loader、style、安装测试
 tests/integration/                    显式真实项目只读集成
 scripts/                              可逆安装与 Skill 校验入口
-.github/workflows/ci.yml               Linux Node 22.19/latest + Windows execution/validation runtime CI
+.github/workflows/ci.yml               Linux Node 22.19/latest verify + Windows execution/validation/installer CI
 ```
 
 安装使用符号链接，不复制 Skill、Extension 或 style，因此只有一份源树。
@@ -131,14 +132,14 @@ npm run link:install
 - `extensions/hpi`
 - `talk/styles/hpi-project`
 
-安装器先检查全部目标；有冲突时在写入前整体拒绝。完成后重载 Pi。
+安装器以 fail-closed lock 串行化同一 Agent 根的协作写入；删除时先把当前目录项原子移动到同目录随机 quarantine，再重新验证其身份与链接目标。只有仍精确属于 HPI 的链接才会删除；若并发替换为普通文件或其他链接，则保留 quarantine 并返回恢复路径。安装或升级后应启动新的 Pi process/session；`/reload` 可能保留 stale transitive module graph，不能作为重启或恢复证明。
 
 ```bash
 npm run link:status
 npm run link:uninstall
 ```
 
-卸载只删除仍准确指向本项目的受管链接。
+卸载和安装回滚只删除在原子 quarantine 后仍准确指向本项目的受管链接；残留 installer lock 不自动夺取，须先确认没有运行中的 installer，再按错误中给出的路径人工处理。
 
 ## 使用
 
@@ -183,9 +184,12 @@ npm test
 npm run test:wire
 npm run test:execution-wire
 npm run test:validation-runtime
+npm run test:install
 npm run validate:skill
 npm run verify
 ```
+
+`validate:skill` 优先使用当前 Pi Agent 根中的 governed `skill-authoring` validator；clean CI 无该安装时使用仓库内固定的 `1.2.0` validator snapshot，并通过 package 锁定的 Pi `0.84.2` loader 做 discovery。
 
 真实 R-ICL 只读集成：
 
@@ -211,6 +215,7 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 12. validation record 必须连续、内容寻址并完整绑定五个 Gate；所有成功 code/evidence 与 MachineResult kind/statement/evidence/limitations 必须等于共享 canonical derivation；
 13. exact replay 零追加；divergent attempt conflict；fresh process 中 non-terminal 永不恢复成完成，残留 lock 不自动夺取；
 14. write worker 必须逐段锚定 cwd，atomic no-replace，不跟随替换后的 parent/target；POSIX reopen 必须验证 0700/0600、owner 与单 link；
-15. store 外项目权威文件前后 SHA 不变；historical PASS 在 current Gate/source 漂移或不可用时不得由 runtime 或投影显示为当前 PASS；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并。
+15. store 外项目权威文件前后 SHA 不变；historical PASS 在 current Gate/source 漂移或不可用时不得由 runtime 或投影显示为当前 PASS；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并；
+16. installer/uninstaller 不得依据旧 pathname classification 删除目录项；删除和 rollback 必须 lock、原子 quarantine、重新验证并保留任何 ownership drift。
 
-GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。0.6 初始 VRS1 merge commit `5c10b42…`（tree `54b6573…`）的早期本地 RELEASE 曾被 Sol job `29d0ee3f…` 的 BLOCK 覆盖；corrective commit `cd64c07…` 随后经独立精确提交确认和 Sol 同线程 job `2579940c…` 复审均给出 VRS1-only RELEASE、无剩余 P1/P2，以 `3bbbc42…` 合入 `main`，post-merge CI run `33466115725` 三项全绿。该 RELEASE 不得外推为正式 TS-001、完整 P0、HumanResult 或 canonical 接受。
+GitHub 公开仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。0.6 初始 VRS1 merge commit `5c10b42…`（tree `54b6573…`）的早期本地 RELEASE 曾被 Sol job `29d0ee3f…` 的 BLOCK 覆盖；corrective commit `cd64c07…` 随后经独立精确提交确认和 Sol 同线程 job `2579940c…` 复审均给出 VRS1-only RELEASE、无剩余 P1/P2，以 `3bbbc42…` 合入 `main`。全仓 Sol job `2a80405f…` 继续确认 VRS1 RELEASE，但因 installer ownership TOCTOU 对 package 0.6.0 给出 BLOCK；Issue #7 corrective candidate 在精确提交复审和跨平台 CI 前不称 package RELEASE。以上结论均不得外推为正式 TS-001、完整 P0、HumanResult 或 canonical 接受。
