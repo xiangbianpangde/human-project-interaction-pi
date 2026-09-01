@@ -11,6 +11,7 @@
     "test:validation-runtime": "node --test tests/validation-runtime-contract.test.mjs tests/validation-runtime-store.test.mjs tests/validation-runtime.test.mjs",
     "test:validation-contract": "node --test tests/validation-runtime-contract.test.mjs",
     "test:ricl": "node --test tests/integration/ricl-real.mjs",
+    "test:install": "node --test tests/install.test.mjs",
     "validate:skill": "node scripts/validate-skill.mjs",
     "verify": "npm run test && npm run validate:skill",
     "link:install": "node scripts/link-install.mjs install",

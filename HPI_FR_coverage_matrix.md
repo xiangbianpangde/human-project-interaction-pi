@@ -68,6 +68,7 @@ scope: HPI package 0.6.0 implementation candidate; interaction-v1 + preserved ex
 | 单个 VERIFIED fact 掩盖 FAILED/NOT_RUN/INCOMPLETE/SELF_REPORTED，或重复/无身份 fact 可升为 PASS | `deriveMachineVerdict` 与 MachineResult companion validator 共享非空、结构完整、fact id 唯一且全部 VERIFIED 的 fact-set 合同；任一不一致保持/降为 INCOMPLETE | `tests/contracts.test.mjs` 覆盖四类 mixed-status、空、重复/缺失 id 与 malformed Evidence ref；execution test 覆盖 derivation、validator、interaction/execution codec 和 v2 schema |
 | 伪造 `sourceDigest` 可通过 | digest 必须等于 `sha256({adapter, canonical sourceSnapshot})` | `tests/adapter-contract.test.mjs`、`tests/projector.test.mjs` |
 | 安装器忽略 Pi 正式配置变量 | 优先级改为 HPI override → `PI_CODING_AGENT_DIR` → legacy `PI_AGENT_DIR` → default | `tests/install.test.mjs` |
+| uninstall/rollback 按旧 pathname classification 删除并发替换后的非 HPI entry | 同一 Agent 根用 fail-closed lock 串行化；目标先原子移动到随机 quarantine，再重新验证 link target 与 entry identity；ownership drift 保留并报告，不删除 | regular file、foreign symlink/junction、quarantine final-check、rollback 与 residual-lock 负向测试；Windows CI 运行 installer suite |
 | 测试固定 Homebrew loader 路径 | 从 `pi` executable、`PI_PACKAGE_DIR` 或显式 override 定位 package root | `src/pi-paths.mjs` 与安装/Extension 测试 |
 | HULA 错引 `[E12]` | PRD 正文改为 `[E09]` | `human-project-interaction-skills-prd.md` 引用表与正文一致 |
 | snake_case/camelCase 合同漂移 | 外部冻结为 `hpi/wire/v1` snake_case-only；内部 camelCase 只经显式 codec 导出 | 7 个 schema 严格编译；schema-set digest `1d08d1ac…264725`；mixed-key、缺字段、错类型、越界枚举和 hash tamper 负向测试 |
@@ -107,9 +108,9 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 
 ## 6. 下一关闭顺序
 
-1. 0.6 corrective commit `cd64c07…` 已完成独立精确提交复审、Sol 同线程复审及 Linux/Windows post-merge CI；结论仅覆盖 VRS1，早期或当前 RELEASE 均不外推为正式 TS-001/P0/HumanResult/canonical 接受。
-2. 保持 developer conformance 与正式 TS-001 lane 分离；后者必须补齐授权来源与独立 Validation Agent，当前合同继续 `NOT-RUN`。
-3. 用 true fresh process 扩展 conflict/partial-publish/rollback 负向场景；Issue #2 的 `/reload` stale graph 只作负向，不当恢复证据。
+1. 关闭全仓 Sol job `2a80405f…` 的 package-level Issue #7：installer ownership-preserving removal 须通过精确提交复审与 Linux/Windows CI；VRS1 RELEASE 不受该包级 P2 影响。
+2. 解决或界定 Issue #2；安装/升级后的可靠 fallback 是 fresh Pi process/session，`/reload` 只作 fail-safe 负向，不当恢复证明。
+3. 保持 developer conformance 与正式 TS-001 lane 分离；后者必须补齐授权来源与独立 Validation Agent，当前合同继续 `NOT-RUN`。
 4. 再在 Adapter 中只读发现真实 Handoff/Result/Evidence；缺失保持 `INCOMPLETE`，不得把 source prose 转成 Bundle。
 5. 冻结仍缺的 ExperimentSpec、ValidationResult 与项目 Event/Recovery transaction；既有四套 wire set immutable。
 6. 接入独立 Implementation/Validation Agent 与通用 permission/reference/evidence Gate；之后才设计 HumanResult inbound 与受保护 canonical writer。
