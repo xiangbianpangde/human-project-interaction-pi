@@ -11,7 +11,7 @@
 - Bind persisted successful Gate codes/evidence and every MachineResult fact/statement/limitation to one shared canonical derivation; reject a self-consistent recomputed five-Gate forged PASS.
 - Cover workspace/authority expansion, retry success/non-latest/locked refs, duplicate snapshots, parent-directory swap, concurrent-target no-replace, reopened file/directory permissions, immutable-content/filename conflicts, and R-ICL rejection; run contract, store, and runtime tests on Windows while keeping POSIX mode/link and `SIGKILL` recovery checks on Linux.
 - Keep formal TS-001 `NOT-RUN`; do not add an independent Validation Agent, Agent dispatch, HumanResult/CandidateEvent intake, canonical writer, automatic invalidation, generalized Reconciler, or project transaction authority.
-- Record that the 0.5.0 read-only baseline was independently reviewed as RELEASE and merged to `main`; a later Sol audit blocked the initial merged VRS1 tree on write-TOCTOU, forged-ledger PASS and persisted-mode gaps. The corrective 0.6.0 candidate requires a new exact-commit review/CI verdict and never implies formal TS-001, P0, HumanResult, or canonical acceptance.
+- Record that the 0.5.0 read-only baseline was independently reviewed as RELEASE and merged to `main`; a later Sol audit blocked the initial merged VRS1 tree on write-TOCTOU, forged-ledger PASS and persisted-mode gaps. Corrective commit `cd64c07…` closed all three findings, received independent and Sol same-thread VRS1-only RELEASE verdicts with no remaining P1/P2, merged as `3bbbc42…`, and passed post-merge Linux/Windows CI; none of these facts implies formal TS-001, P0, HumanResult, or canonical acceptance.
 
 ## 0.5.0 - 2026-08-31
 

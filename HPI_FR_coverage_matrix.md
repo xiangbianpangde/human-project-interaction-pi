@@ -107,7 +107,7 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 
 ## 6. 下一关闭顺序
 
-1. 对 Sol BLOCK 后的 0.6 corrective candidate 做精确 commit 的独立源码复审与 Linux/Windows CI；0.5 只读基线及早期本地 RELEASE 结论都不外推到修复后的 runtime。
+1. 0.6 corrective commit `cd64c07…` 已完成独立精确提交复审、Sol 同线程复审及 Linux/Windows post-merge CI；结论仅覆盖 VRS1，早期或当前 RELEASE 均不外推为正式 TS-001/P0/HumanResult/canonical 接受。
 2. 保持 developer conformance 与正式 TS-001 lane 分离；后者必须补齐授权来源与独立 Validation Agent，当前合同继续 `NOT-RUN`。
 3. 用 true fresh process 扩展 conflict/partial-publish/rollback 负向场景；Issue #2 的 `/reload` stale graph 只作负向，不当恢复证据。
 4. 再在 Adapter 中只读发现真实 Handoff/Result/Evidence；缺失保持 `INCOMPLETE`，不得把 source prose 转成 Bundle。
