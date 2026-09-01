@@ -14,7 +14,7 @@
 - Record that the 0.5.0 read-only baseline was independently reviewed as RELEASE and merged to `main`; a later Sol audit blocked the initial merged VRS1 tree on write-TOCTOU, forged-ledger PASS and persisted-mode gaps. Corrective commit `cd64c07…` closed all three findings, received independent and Sol same-thread VRS1-only RELEASE verdicts with no remaining P1/P2, merged as `3bbbc42…`, and passed post-merge Linux/Windows CI; none of these facts implies formal TS-001, P0, HumanResult, or canonical acceptance.
 - Record full-repository Sol job `2a80405f…`: VRS1 remains RELEASE, formal TS-001 remains `NOT-RUN`, and package 0.6.0 is BLOCKED on Issue #7 because uninstall/rollback could delete a concurrently substituted non-HPI pathname after stale ownership classification.
 - Replace classify-then-unlink with one shared lock + same-directory atomic quarantine + identity/target revalidation removal primitive; retain and report any foreign replacement, use the same primitive during install rollback, and expose deterministic race hooks only under `node --test`.
-- Run `npm run verify` in Linux CI, add installer/uninstaller tests to Windows CI, document a fresh Pi process/session fallback for stale `/reload`, and identify the repository as public.
+- Run `npm run verify` in Linux CI, bundle the reviewed governed Skill validator `1.2.0` snapshot for clean runners, add portable installer/uninstaller tests to Windows CI, document a fresh Pi process/session fallback for stale `/reload`, and identify the repository as public.
 
 ## 0.5.0 - 2026-08-31
 

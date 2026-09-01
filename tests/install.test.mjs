@@ -52,28 +52,30 @@ afterEach(async () => {
 });
 
 describe("Pi path resolution", () => {
-  it("locates the installed Pi package without a Homebrew-specific absolute import", () => {
-    assert.match(resolvePiPackageRoot(), /pi-coding-agent$/);
+  it("locates the pinned Pi package without a Homebrew-specific absolute import", () => {
+    const packageRoot = join(rootPath, "node_modules", "@earendil-works", "pi-coding-agent");
+    assert.equal(resolvePiPackageRoot({ packageRoot }), resolve(packageRoot));
   });
 
   it("honors Pi's documented config variable with explicit package overrides first", () => {
     const root = rootPath;
+    const skillSuffix = ["skills", "task", "human-project-interaction"];
     const target = (env) => installationPlan({ root, env })[0].target;
     assert.equal(
       target({ HPI_PI_AGENT_DIR: "/hpi", PI_CODING_AGENT_DIR: "/pi", PI_AGENT_DIR: "/legacy", HOME: "/home" }),
-      "/hpi/skills/task/human-project-interaction",
+      resolve("/hpi", ...skillSuffix),
     );
     assert.equal(
       target({ PI_CODING_AGENT_DIR: "/pi", PI_AGENT_DIR: "/legacy", HOME: "/home" }),
-      "/pi/skills/task/human-project-interaction",
+      resolve("/pi", ...skillSuffix),
     );
     assert.equal(
       target({ PI_AGENT_DIR: "/legacy", HOME: "/home" }),
-      "/legacy/skills/task/human-project-interaction",
+      resolve("/legacy", ...skillSuffix),
     );
     assert.equal(
       target({ HOME: "/home" }),
-      "/home/.pi/agent/skills/task/human-project-interaction",
+      resolve("/home", ".pi", "agent", ...skillSuffix),
     );
   });
 });

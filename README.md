@@ -189,6 +189,8 @@ npm run validate:skill
 npm run verify
 ```
 
+`validate:skill` 优先使用当前 Pi Agent 根中的 governed `skill-authoring` validator；clean CI 无该安装时使用仓库内固定的 `1.2.0` validator snapshot，并通过 package 锁定的 Pi `0.84.2` loader 做 discovery。
+
 真实 R-ICL 只读集成：
 
 ```bash
