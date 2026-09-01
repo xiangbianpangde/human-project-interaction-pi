@@ -32,6 +32,7 @@ export {
   evaluateValidationAttemptGates,
   previewValidationAttempt,
   readValidationAttemptInput,
+  reevaluateStoredValidationAttemptGates,
 } from "./validation-runtime/intake.mjs";
 
 export {

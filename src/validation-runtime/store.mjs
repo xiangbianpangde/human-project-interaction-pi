@@ -1,21 +1,15 @@
 import {
-  closeSync,
-  constants,
   existsSync,
-  fsyncSync,
   lstatSync,
-  mkdirSync,
-  openSync,
   readFileSync,
   readdirSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
+  realpathSync,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { TextDecoder } from "node:util";
+import { fileURLToPath } from "node:url";
 
 import { sha256, validateMachineResult } from "../contracts.mjs";
 import { readAuthoritativeFileBuffers } from "../adapters/authoritative-files.mjs";
@@ -33,12 +27,18 @@ import {
   fromWireValidationAttemptRecord,
   toWireValidationAttemptRecord,
 } from "./codecs.mjs";
+import {
+  assertCanonicalValidationMachineResult,
+  assertCanonicalValidationRecordSemantics,
+} from "./semantics.mjs";
 
 const MAX_STORE_FILE_BYTES = 2 * 1024 * 1024;
 const UTF8 = new TextDecoder("utf-8", { fatal: true });
 const RECORD_FILE = /^(\d{6})-([a-f0-9]{64})\.json$/u;
 const RESULT_FILE = /^([A-Za-z0-9][A-Za-z0-9._-]{0,255})-([a-f0-9]{64})\.json$/u;
 const MANIFEST_FILE = /^manifest-([a-f0-9]{64})\.json$/u;
+const STORE_WORKER = fileURLToPath(new URL("./store-worker.mjs", import.meta.url));
+const STORE_WORKER_BUFFER_BYTES = 4 * 1024 * 1024;
 
 export class ValidationRuntimeStoreError extends Error {
   constructor(code, message, details = {}) {
@@ -68,35 +68,69 @@ function safeRoot(projectRoot) {
   return root;
 }
 
-function ensureSafeDirectoryChain(projectRoot, relativePath) {
-  const root = safeRoot(projectRoot);
-  const candidate = resolve(root, relativePath);
-  if (!inside(root, candidate)) fail("STORE_PATH_ESCAPE", `${relativePath} escapes project root`);
-  let current = root;
-  let relativeCurrent = "";
-  for (const segment of relativePath.split("/")) {
-    current = join(current, segment);
-    relativeCurrent = relativeCurrent ? `${relativeCurrent}/${segment}` : segment;
-    if (!existsSync(current)) mkdirSync(current, { mode: 0o700 });
-    const stats = lstatSync(current);
-    if (!stats.isDirectory() || stats.isSymbolicLink()) {
-      fail("UNSAFE_STORE_PATH", `${relativePath} contains a non-directory or symlink`, { path: current });
-    }
-    try {
-      if (
-        process.platform !== "win32" &&
-        (relativeCurrent === ".pi/artifacts/hpi-validation" ||
-          relativeCurrent.startsWith(".pi/artifacts/hpi-validation/"))
-      ) {
-        const mode = statSync(current).mode & 0o777;
-        if ((mode & 0o077) !== 0) fail("STORE_DIRECTORY_MODE", `${current} must not be group/world accessible`);
-      }
-    } catch (error) {
-      if (error instanceof ValidationRuntimeStoreError) throw error;
-      fail("STORE_DIRECTORY_INSPECTION", `cannot inspect ${current}`, { cause: error });
-    }
+function workerRootIdentity(root) {
+  if (!existsSync(root)) fail("PROJECT_ROOT_MISSING", `project root does not exist: ${root}`);
+  const stats = lstatSync(root, { bigint: true });
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    fail("UNSAFE_PROJECT_ROOT", "project root must be a non-symlink directory");
   }
-  return candidate;
+  const realpath = realpathSync.native ? realpathSync.native(root) : realpathSync(root);
+  return {
+    rootIdentity: { dev: String(stats.dev), ino: String(stats.ino) },
+    rootRealpath: realpath,
+  };
+}
+
+function parseWorkerFailure(stderr) {
+  const line = String(stderr ?? "").trim().split(/\r?\n/u).filter(Boolean).at(-1);
+  if (!line) return null;
+  try {
+    const parsed = JSON.parse(line);
+    return parsed?.error ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function runStoreWorker(projectRoot, request, options = {}) {
+  if (options.testOnlyWorkerHook !== undefined && process.env.NODE_TEST_CONTEXT === undefined) {
+    fail("STORE_TEST_HOOK_DISABLED", "store race hooks are available only under node --test");
+  }
+  const root = resolve(projectRoot);
+  const rootDetails = workerRootIdentity(root);
+  const payload = {
+    ...request,
+    ...rootDetails,
+    ...(options.testOnlyWorkerHook === undefined
+      ? {}
+      : { testOnlyHook: options.testOnlyWorkerHook }),
+  };
+  const child = spawnSync(process.execPath, [STORE_WORKER], {
+    cwd: root,
+    input: Buffer.from(JSON.stringify(payload), "utf8"),
+    encoding: "utf8",
+    maxBuffer: STORE_WORKER_BUFFER_BYTES,
+    env: options.testOnlyWorkerHook === undefined
+      ? process.env
+      : { ...process.env, HPI_VALIDATION_STORE_TEST_HOOKS: "1" },
+  });
+  if (child.error) fail("STORE_WORKER_LAUNCH", "cannot launch the anchored store worker", { cause: child.error });
+  if (child.status !== 0) {
+    const error = parseWorkerFailure(child.stderr);
+    fail(
+      error?.code ?? "STORE_WORKER_FAILURE",
+      error?.message ?? `anchored store worker exited with status ${String(child.status)}`,
+      { ...(error?.details ?? {}), stderr: String(child.stderr ?? "").slice(-2_000) },
+    );
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(String(child.stdout).trim());
+  } catch (error) {
+    fail("STORE_WORKER_OUTPUT", "anchored store worker returned invalid JSON", { cause: error });
+  }
+  if (parsed?.ok !== true || !parsed.result) fail("STORE_WORKER_OUTPUT", "anchored store worker returned no result");
+  return parsed.result;
 }
 
 export function validationAttemptStorePaths(projectRoot, attemptId) {
@@ -119,8 +153,10 @@ export function validationAttemptStorePaths(projectRoot, attemptId) {
 export function inspectValidationStoreBoundary(projectRoot, attemptId) {
   const paths = validationAttemptStorePaths(projectRoot, attemptId);
   let current = paths.projectRoot;
+  let relativeCurrent = "";
   for (const segment of paths.relativeRoot.split("/")) {
     current = join(current, segment);
+    relativeCurrent = relativeCurrent ? `${relativeCurrent}/${segment}` : segment;
     if (!existsSync(current)) continue;
     const stats = lstatSync(current);
     if (!stats.isDirectory() || stats.isSymbolicLink()) {
@@ -128,92 +164,54 @@ export function inspectValidationStoreBoundary(projectRoot, attemptId) {
         path: current,
       });
     }
+    if (
+      relativeCurrent === ".pi/artifacts/hpi-validation" ||
+      relativeCurrent.startsWith(".pi/artifacts/hpi-validation/")
+    ) {
+      assertPrivateStoredDirectory(stats, relativeCurrent);
+    }
   }
   return { ...paths, available: true, projectCanonicalChanged: false };
 }
 
-function ensureAttemptDirectories(projectRoot, attemptId) {
-  const paths = validationAttemptStorePaths(projectRoot, attemptId);
-  ensureSafeDirectoryChain(projectRoot, paths.relativeRoot);
-  for (const child of ["input", "records", "machine-results"]) {
-    ensureSafeDirectoryChain(projectRoot, `${paths.relativeRoot}/${child}`);
+function storeBytes(value) {
+  const bytes = Buffer.from(value);
+  if (bytes.length > MAX_STORE_FILE_BYTES) {
+    fail("STORE_ENTRY_OVERSIZE", `immutable store entries must be at most ${MAX_STORE_FILE_BYTES} bytes`);
   }
-  return paths;
+  return bytes;
 }
 
-function syncDirectory(path) {
-  if (process.platform === "win32") return;
-  const descriptor = openSync(path, constants.O_RDONLY);
-  try {
-    fsyncSync(descriptor);
-  } finally {
-    closeSync(descriptor);
-  }
-}
-
-function atomicPublishBytes(target, bytes) {
-  if (!Buffer.isBuffer(bytes) || bytes.length > MAX_STORE_FILE_BYTES) {
-    fail("STORE_ENTRY_OVERSIZE", `immutable store entries must be Buffers of at most ${MAX_STORE_FILE_BYTES} bytes`);
-  }
-  const parent = dirname(target);
-  const temp = join(parent, `.${basename(target)}.${randomUUID()}.tmp`);
-  let descriptor;
-  try {
-    descriptor = openSync(temp, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
-    writeFileSync(descriptor, bytes);
-    fsyncSync(descriptor);
-  } finally {
-    if (descriptor !== undefined) closeSync(descriptor);
-  }
-  if (existsSync(target)) {
-    const existing = readFileSync(target);
-    rmSync(temp, { force: true });
-    if (!existing.equals(bytes)) {
-      fail("IMMUTABLE_FILE_CONFLICT", `existing immutable file differs: ${target}`);
-    }
-    return { replay: true, path: target };
-  }
-  renameSync(temp, target);
-  syncDirectory(parent);
-  return { replay: false, path: target };
-}
-
-function atomicPublishJson(target, value) {
-  return atomicPublishBytes(target, Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8"));
+function storeJson(value) {
+  return Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
 export function acquireValidationAttemptLock(projectRoot, attemptId, owner = {}) {
   loadValidationRuntimeWireSchemaSet();
-  const paths = ensureAttemptDirectories(projectRoot, attemptId);
-  try {
-    mkdirSync(paths.lockDir, { mode: 0o700 });
-  } catch (error) {
-    if (error?.code === "EEXIST") {
-      fail("ATTEMPT_LOCKED", `attempt ${attemptId} already has an active or stale lock`, {
-        lockDir: paths.lockDir,
-      });
-    }
-    throw error;
-  }
-  try {
-    atomicPublishJson(join(paths.lockDir, "owner.json"), {
+  const paths = validationAttemptStorePaths(projectRoot, attemptId);
+  const lockToken = randomUUID();
+  runStoreWorker(projectRoot, {
+    op: "acquire_lock",
+    attemptId,
+    bytesBase64: storeJson({
       ...owner,
       schema: "hpi/validation-attempt-lock/v1",
       attempt_id: attemptId,
+      lock_token: lockToken,
       pid: process.pid,
       acquired_at: new Date().toISOString(),
-    });
-  } catch (error) {
-    rmSync(paths.lockDir, { recursive: true, force: true });
-    throw error;
-  }
+    }).toString("base64"),
+  });
   let released = false;
   return {
     paths,
     release() {
       if (released) return;
-      rmSync(paths.lockDir, { recursive: true, force: true });
-      syncDirectory(paths.attemptRoot);
+      runStoreWorker(projectRoot, {
+        op: "release_lock",
+        attemptId,
+        lockToken,
+      });
       released = true;
     },
   };
@@ -241,23 +239,35 @@ export function publishValidationInputSnapshot(projectRoot, attemptId, wireInput
   if (parsed.validationAttemptId !== attemptId) {
     fail("INPUT_SNAPSHOT_ATTEMPT", "input snapshot attempt identity differs from its store root");
   }
-  const paths = ensureAttemptDirectories(projectRoot, attemptId);
+  const paths = validationAttemptStorePaths(projectRoot, attemptId);
   const digest = sha256Bytes(bytes);
-  const target = join(paths.inputDir, `manifest-${digest}.json`);
-  atomicPublishBytes(target, bytes);
+  const name = `manifest-${digest}.json`;
+  runStoreWorker(projectRoot, {
+    op: "publish",
+    attemptId,
+    area: "input",
+    targetName: name,
+    bytesBase64: storeBytes(bytes).toString("base64"),
+  });
   return {
     id: attemptId,
     revision: parsed.inputRevision,
     sha256: digest,
-    pointer: `${paths.relativeRoot}/input/${basename(target)}`,
+    pointer: `${paths.relativeRoot}/input/${name}`,
   };
 }
 
-export function publishValidationRecord(projectRoot, recordDraft) {
+function publishValidationRecordInternal(projectRoot, recordDraft, workerOptions = {}) {
   const wire = toWireValidationAttemptRecord(recordDraft);
-  const paths = ensureAttemptDirectories(projectRoot, recordDraft.validationAttemptId);
+  const paths = validationAttemptStorePaths(projectRoot, recordDraft.validationAttemptId);
   const name = `${String(wire.sequence).padStart(6, "0")}-${wire.record_revision}.json`;
-  const published = atomicPublishJson(join(paths.recordsDir, name), wire);
+  const published = runStoreWorker(projectRoot, {
+    op: "publish",
+    attemptId: recordDraft.validationAttemptId,
+    area: "records",
+    targetName: name,
+    bytesBase64: storeJson(wire).toString("base64"),
+  }, workerOptions);
   return {
     wire,
     internal: fromWireValidationAttemptRecord(wire).internal,
@@ -271,6 +281,17 @@ export function publishValidationRecord(projectRoot, recordDraft) {
   };
 }
 
+export function publishValidationRecord(projectRoot, recordDraft) {
+  return publishValidationRecordInternal(projectRoot, recordDraft);
+}
+
+export function testOnlyPublishValidationRecordWithWorkerHook(projectRoot, recordDraft, testOnlyWorkerHook) {
+  if (process.env.NODE_TEST_CONTEXT === undefined) {
+    fail("STORE_TEST_HOOK_DISABLED", "store race hooks are available only under node --test");
+  }
+  return publishValidationRecordInternal(projectRoot, recordDraft, { testOnlyWorkerHook });
+}
+
 export function publishValidationMachineResult(projectRoot, attemptId, machineResult) {
   validationAttemptId(attemptId);
   validateMachineResult(machineResult);
@@ -278,9 +299,15 @@ export function publishValidationMachineResult(projectRoot, attemptId, machineRe
     fail("MACHINE_RESULT_ATTEMPT", "MachineResult attemptId differs from its store root");
   }
   const wire = toWireMachineResult(machineResult);
-  const paths = ensureAttemptDirectories(projectRoot, attemptId);
+  const paths = validationAttemptStorePaths(projectRoot, attemptId);
   const name = `${wire.result_id}-${wire.result_revision}.json`;
-  const published = atomicPublishJson(join(paths.machineResultsDir, name), wire);
+  const published = runStoreWorker(projectRoot, {
+    op: "publish",
+    attemptId,
+    area: "machine-results",
+    targetName: name,
+    bytesBase64: storeJson(wire).toString("base64"),
+  });
   return {
     wire,
     replay: published.replay,
@@ -297,23 +324,50 @@ function projectRelative(root, absolute) {
   return relative(root, absolute).split(sep).join("/");
 }
 
+function assertPrivateStoredDirectory(stats, label) {
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    fail("UNSAFE_STORE_PATH", `${label} is not a non-symlink directory`);
+  }
+  if (process.platform !== "win32") {
+    const mode = stats.mode & 0o777;
+    if ((mode & 0o077) !== 0) {
+      fail("STORE_DIRECTORY_MODE", `${label} must not be group/world accessible`, { mode });
+    }
+    if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
+      fail("STORE_DIRECTORY_OWNER", `${label} must be owned by the runtime user`);
+    }
+  }
+}
+
+function assertPrivateStoredFile(stats, label) {
+  if (!stats.isFile() || stats.isSymbolicLink()) {
+    fail("UNSAFE_STORE_ENTRY", `${label} is not a regular non-symlink file`);
+  }
+  if (stats.size > MAX_STORE_FILE_BYTES) {
+    fail("STORE_ENTRY_OVERSIZE", `${label} exceeds ${MAX_STORE_FILE_BYTES} bytes`);
+  }
+  if (process.platform !== "win32") {
+    const mode = stats.mode & 0o777;
+    if (mode !== 0o600) fail("STORE_FILE_MODE", `${label} must have mode 0600`, { mode });
+    if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
+      fail("STORE_FILE_OWNER", `${label} must be owned by the runtime user`);
+    }
+    if (stats.nlink !== 1) {
+      fail("STORE_FILE_LINK_COUNT", `${label} must have exactly one hard link`, { nlink: stats.nlink });
+    }
+  }
+}
+
 function safeStoredFiles(projectRoot, directory, pattern, kind) {
   if (!existsSync(directory)) return [];
   const stats = lstatSync(directory);
-  if (!stats.isDirectory() || stats.isSymbolicLink()) {
-    fail("UNSAFE_STORE_PATH", `${kind} directory is not a safe directory`);
-  }
+  assertPrivateStoredDirectory(stats, `${kind} directory`);
   return readdirSync(directory).map((name) => {
     const match = pattern.exec(name);
     if (!match) fail("UNEXPECTED_STORE_ENTRY", `unexpected ${kind} entry ${name}`);
     const absolute = join(directory, name);
     const entryStats = lstatSync(absolute);
-    if (!entryStats.isFile() || entryStats.isSymbolicLink()) {
-      fail("UNSAFE_STORE_ENTRY", `${kind} entry ${name} is not a regular file`);
-    }
-    if (entryStats.size > MAX_STORE_FILE_BYTES) {
-      fail("STORE_ENTRY_OVERSIZE", `${kind} entry ${name} exceeds ${MAX_STORE_FILE_BYTES} bytes`);
-    }
+    assertPrivateStoredFile(entryStats, `${kind} entry ${name}`);
     return { name, match, pointer: projectRelative(safeRoot(projectRoot), absolute) };
   });
 }
@@ -372,7 +426,7 @@ function parseStoredMachineResult(wire, path) {
   return internal;
 }
 
-function validateStoredMachineResultBinding(machineResult, terminal, attemptId) {
+function validateStoredMachineResultBinding(machineResult, terminal, attemptId, inputManifest) {
   if (
     machineResult.resultId !== `MR-VRS1-${attemptId}` ||
     machineResult.taskId !== `VRS1-${attemptId}` ||
@@ -407,17 +461,19 @@ function validateStoredMachineResultBinding(machineResult, terminal, attemptId) 
     ) {
       fail("MACHINE_RESULT_FACTS", `fact ${index} does not bind ${outcome.gate} and its status`);
     }
-    if (
-      outcome.status === "PASSED" &&
-      !fact.evidenceRefs.some(
-        (ref) =>
-          frozenIdentityKey(ref) === frozenIdentityKey(terminal.previousRecordRef) &&
-          ref.pointer === terminal.previousRecordRef.pointer,
-      )
-    ) {
-      fail("MACHINE_RESULT_FACTS", `verified fact ${fact.id} must cite the immutable RUNNING record`);
-    }
   });
+  try {
+    assertCanonicalValidationMachineResult(
+      machineResult,
+      inputManifest,
+      terminal.previousRecordRef,
+      terminal.gateOutcomes,
+    );
+  } catch (error) {
+    fail(error?.code ?? "MACHINE_RESULT_SEMANTICS", "stored MachineResult is not the canonical V1 derivation", {
+      cause: error,
+    });
+  }
 }
 
 function exactWireKeys(value, keys, path) {
@@ -461,10 +517,9 @@ export function readValidationAttemptHistory(projectRoot, attemptId) {
       projectCanonicalChanged: false,
     };
   }
+  inspectValidationStoreBoundary(projectRoot, attemptId);
   const rootStats = lstatSync(paths.attemptRoot);
-  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
-    fail("UNSAFE_STORE_PATH", "attempt root is not a safe directory");
-  }
+  assertPrivateStoredDirectory(rootStats, "attempt root");
   const allowedAttemptEntries = new Set(["input", "records", "machine-results", ".lock"]);
   for (const entry of readdirSync(paths.attemptRoot)) {
     if (!allowedAttemptEntries.has(entry)) {
@@ -474,17 +529,20 @@ export function readValidationAttemptHistory(projectRoot, attemptId) {
   const locked = existsSync(paths.lockDir);
   if (locked) {
     const lockStats = lstatSync(paths.lockDir);
-    if (!lockStats.isDirectory() || lockStats.isSymbolicLink()) {
-      fail("UNSAFE_ATTEMPT_LOCK", "attempt lock must be a non-symlink directory");
-    }
+    assertPrivateStoredDirectory(lockStats, "attempt lock");
     const lockEntries = readdirSync(paths.lockDir);
     if (lockEntries.length !== 1 || lockEntries[0] !== "owner.json") {
       fail("UNSAFE_ATTEMPT_LOCK", "attempt lock must contain only owner.json");
     }
     const ownerPath = join(paths.lockDir, "owner.json");
     const ownerStats = lstatSync(ownerPath);
-    if (!ownerStats.isFile() || ownerStats.isSymbolicLink() || ownerStats.size > MAX_STORE_FILE_BYTES) {
-      fail("UNSAFE_ATTEMPT_LOCK", "attempt lock owner must be a bounded regular file");
+    try {
+      assertPrivateStoredFile(ownerStats, "attempt lock owner");
+    } catch (error) {
+      if (error instanceof ValidationRuntimeStoreError) throw error;
+      fail("UNSAFE_ATTEMPT_LOCK", "attempt lock owner must be a private bounded regular file", {
+        cause: error,
+      });
     }
     let owner;
     try {
@@ -495,6 +553,8 @@ export function readValidationAttemptHistory(projectRoot, attemptId) {
     if (
       owner?.schema !== "hpi/validation-attempt-lock/v1" ||
       owner?.attempt_id !== attemptId ||
+      typeof owner?.lock_token !== "string" ||
+      owner.lock_token.length < 16 ||
       !Number.isSafeInteger(owner?.pid) ||
       typeof owner?.acquired_at !== "string"
     ) {
@@ -572,6 +632,15 @@ export function readValidationAttemptHistory(projectRoot, attemptId) {
     ) {
       fail("INPUT_SNAPSHOT_IDENTITY", "record input_ref differs from the stored manifest snapshot");
     }
+    try {
+      chain.forEach((record) =>
+        assertCanonicalValidationRecordSemantics(record, inputManifest, storedInputRef),
+      );
+    } catch (error) {
+      fail(error?.code ?? "GATE_SEMANTICS", "stored Gate outcomes are not the canonical V1 derivation", {
+        cause: error,
+      });
+    }
   }
   const recordRefs = chain.map((record, index) => ({
     id: record.recordId,
@@ -610,7 +679,7 @@ export function readValidationAttemptHistory(projectRoot, attemptId) {
     ) {
       fail("MACHINE_RESULT_IDENTITY", "terminal machine_result_ref differs from stored result");
     }
-    validateStoredMachineResultBinding(machineResult, terminal, attemptId);
+    validateStoredMachineResultBinding(machineResult, terminal, attemptId, inputManifest);
   } else if (terminal && resultFiles.length > 0) {
     fail("UNCOMMITTED_MACHINE_RESULT", "a non-producing terminal record must not retain a result snapshot");
   }

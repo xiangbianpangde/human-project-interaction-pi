@@ -77,7 +77,7 @@ scope: HPI package 0.6.0 implementation candidate; interaction-v1 + preserved ex
 | 自由文本伪装 DESIGN 可绕过机器事实 regex | human Gate 改为 projector-owned request binding；question/category echo 改写拒绝 | 中英 8 组 paraphrase、stale/missing request/digest/source 负向测试；Extension 正向 binding 测试 |
 | malformed/divergent outbox / duplicate logical IDs | outbox v2 完整 envelope/digest/receipt/timestamp 校验；same-event divergent digest 整组 quarantine；projector 前置唯一性 Gate | malformed envelope、candidate tamper、`[A,B]`/`[B,A]` conflict 等价、Pain/Design/Task/Result/Request duplicate |
 | Windows path、timestamp、Adapter hostile input | 新 execution v2 path schema；严格 RFC3339；有界 regular-file reader | drive/UNC/backslash/dot/control、date-only/no-zone/invalid date、symlink/intermediate-link/oversize/directory 负向测试 |
-| Validation attempt replay/recovery 被误当项目权威 | 独立 validation set/authority；隔离 store、完整五 Gate chain、one-Gate-one-fact MachineResult binding；runtime/status current result 与 restricted projector 在 base drift/unavailable 时 fail closed；正式 TS-001 保留 NOT-RUN | zero-write preview、store-only diff、current-result drift、exact replay、divergent conflict、retry success/non-latest/locked、workspace/authority expansion、snapshot cardinality、immutable conflict、ref TOCTOU、forged PASS、R-ICL rejection、Linux normal/crash fresh-process 与 Windows runtime tests |
+| Validation attempt replay/recovery 被误当项目权威 | 独立 validation set/authority；cwd-anchored atomic-no-replace store；完整五 Gate chain；persisted success 与 canonical Gate/fact derivation精确相等；runtime/status 重跑 current Gates，restricted projector 在 Gate/base drift/unavailable 时 fail closed；正式 TS-001 保留 NOT-RUN | zero-write preview、store-only diff、parent swap、concurrent target、mode/link count、五 Gate forged PASS、current-result/gate drift、exact replay、divergent conflict、retry success/non-latest/locked、workspace/authority expansion、snapshot cardinality、ref TOCTOU、R-ICL rejection、Linux normal/crash fresh-process 与 Windows runtime tests |
 
 ## 5. 真实 R-ICL Adapter 读边界
 
@@ -107,7 +107,7 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 
 ## 6. 下一关闭顺序
 
-1. 对 0.6 Validation Runtime Slice V1 做精确 commit 的独立源码复审与 Linux/Windows CI；0.5 只读基线的 RELEASE 结论不外推到新 runtime。
+1. 对 Sol BLOCK 后的 0.6 corrective candidate 做精确 commit 的独立源码复审与 Linux/Windows CI；0.5 只读基线及早期本地 RELEASE 结论都不外推到修复后的 runtime。
 2. 保持 developer conformance 与正式 TS-001 lane 分离；后者必须补齐授权来源与独立 Validation Agent，当前合同继续 `NOT-RUN`。
 3. 用 true fresh process 扩展 conflict/partial-publish/rollback 负向场景；Issue #2 的 `/reload` stale graph 只作负向，不当恢复证据。
 4. 再在 Adapter 中只读发现真实 Handoff/Result/Evidence；缺失保持 `INCOMPLETE`，不得把 source prose 转成 Bundle。

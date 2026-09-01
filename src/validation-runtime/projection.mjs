@@ -6,6 +6,7 @@ import {
 } from "../adapters/contract.mjs";
 import { SCHEMAS, validateMachineResult } from "../contracts.mjs";
 import { projectSource } from "../projector.mjs";
+import { reevaluateStoredValidationAttemptGates } from "./intake.mjs";
 import { readValidationAttemptHistory } from "./store.mjs";
 
 export const VALIDATION_PROJECTION_ADAPTER = "ts001-validation-runtime/0.1.0";
@@ -151,8 +152,12 @@ function runtimeSourceRefs(history) {
 export function resolveValidationMachineResultForCurrentBase(projectRoot, history) {
   const base = loadTs001Pilot(projectRoot);
   const historicalMachineResult = history.machineResult ?? syntheticMachineResult(history);
+  const currentGateRevalidation = history.machineResult
+    ? reevaluateStoredValidationAttemptGates(projectRoot, history)
+    : null;
   const currentBaseDrifted = Boolean(
-    history.machineResult && !resultMatchesCurrentBase(history.machineResult, base),
+    history.machineResult &&
+      (!resultMatchesCurrentBase(history.machineResult, base) || !currentGateRevalidation.accepted),
   );
   const validationMachineResult = currentBaseDrifted
     ? staleMachineResult(history, history.machineResult, base)
@@ -162,6 +167,7 @@ export function resolveValidationMachineResultForCurrentBase(projectRoot, histor
     historicalMachineResult,
     validationMachineResult,
     currentBaseDrifted,
+    currentGateRevalidation,
   };
 }
 

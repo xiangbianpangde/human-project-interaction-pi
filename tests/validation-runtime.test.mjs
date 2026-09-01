@@ -346,7 +346,12 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
       assert.equal(result.machineResult, null);
       assert.equal(result.history.terminal.outcome, "INPUT_REJECTED");
       assert.deepEqual(result.history.records.map((record) => record.phase), ["DECLARED", "TERMINAL"]);
-      assert.equal(result.history.records[1].gateOutcomes.find((entry) => entry.gate === "V1_REFERENCE").status, "FAILED");
+      const persistedReference = result.history.records[1].gateOutcomes.find(
+        (entry) => entry.gate === "V1_REFERENCE",
+      );
+      assert.equal(persistedReference.status, "FAILED");
+      assert.equal(persistedReference.code, "REFERENCES_REJECTED");
+      assert.equal(result.gates.errors[0].code, "REFERENCE_DIGEST_MISMATCH");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -370,6 +375,7 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
 
   it("never resumes a partial attempt and accepts retry only under a new ID bound to the exact latest record", () => {
     const root = temporaryRoot();
+    let priorLock;
     try {
       const oldFixture = buildValidationAttemptFixture(root, { attemptId: "VRS1-OLD-INTERRUPTED" });
       const interrupted = runValidationAttempt(root, oldFixture.manifestPointer, {
@@ -393,7 +399,16 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
       assert.equal(retry.machineResult.verdict, "PASS-ENGINEERING");
       assert.equal(retry.history.inputManifest.retryOf.id, retryOf.id);
       assert.equal(getValidationAttemptStatus(root, oldFixture.wire.validation_attempt_id).history.records.length, 3);
+
+      priorLock = acquireValidationAttemptLock(root, oldFixture.wire.validation_attempt_id, {
+        invocation_id: "revalidation-prior-lock",
+      });
+      const revalidated = getValidationAttemptStatus(root, retryFixture.wire.validation_attempt_id);
+      assert.equal(revalidated.history.machineResult.verdict, "PASS-ENGINEERING");
+      assert.equal(revalidated.machineResult.verdict, "INCOMPLETE");
+      assert.equal(revalidated.currentBaseDrifted, true);
     } finally {
+      priorLock?.release();
       rmSync(root, { recursive: true, force: true });
     }
   });
