@@ -7,7 +7,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 - **TS-001 Adapter `ts001-pilot/0.1.0`**：冻结的自包含试点，只读本目录三份材料；机器状态保持 `NOT-RUN`。
 - **Package `0.5.0` 只读基线**：精确提交 `c79542b…` 经独立复审给出 RELEASE，并以 merge commit `5cbc57a…` 合入 `main`；TS-001 仍为 `NOT-RUN`。
 - **Package `0.6.0` Validation Runtime Slice V1**：Sol 对初始 merge tree 的 BLOCK 已由 corrective commit `cd64c07…` 关闭；同线程复审给出 VRS1-only RELEASE、无剩余 P1/P2，PR #5 以 merge commit `3bbbc42…` 合入 `main`，post-merge Linux/Windows CI 全绿。
-- **Package-level corrective candidate**：全仓 Sol 审核 job `2a80405f…` 保持 VRS1 RELEASE，但因 installer/uninstaller ownership TOCTOU 将整个 package 判为 BLOCK；Issue #7 的修复须经精确提交复审与 Linux/Windows CI 后才能清除。
+- **Package `0.6.0` package-level verdict**：Issue #7 corrective candidate `8393d3d…`（tree `cc359a8…`）经独立复审与 Sol same-thread follow-up `38ed711f…` 判为 **RELEASE WITH OBSERVATIONS**，P0/P1/P2 均为 0；PR #8 以 merge commit `7ccbaab…` 合入相同 tree，exact-head CI `33487922214` 与 post-merge CI `33489305184` 的 Linux/Windows jobs 全绿，Issue #7 已关闭。非阻断 P3 包括 hostile same-user final quarantine race、bundled validator provenance hardening，以及 Issue #2 的 stale `/reload`。
 - **完整 P0：未关闭**。详见 [FR-001～FR-024 覆盖矩阵](HPI_FR_coverage_matrix.md)。
 
 已实现的试点能力：
