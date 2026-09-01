@@ -6,7 +6,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 
 - **TS-001 Adapter `ts001-pilot/0.1.0`**：冻结的自包含试点，只读本目录三份材料；机器状态保持 `NOT-RUN`。
 - **Package `0.5.0` 只读基线**：精确提交 `c79542b…` 经独立复审给出 RELEASE，并以 merge commit `5cbc57a…` 合入 `main`；TS-001 仍为 `NOT-RUN`。
-- **Package `0.6.0` corrective candidate**：Validation Runtime Slice V1 已合并，但最终 Sol 防御性审计对 merge tree 给出 BLOCK；当前分支正在关闭 write-TOCTOU、forged-ledger PASS 与 persisted-mode 三项缺口，精确修复提交复审前不称为 RELEASE。
+- **Package `0.6.0` Validation Runtime Slice V1**：Sol 对初始 merge tree 的 BLOCK 已由 corrective commit `cd64c07…` 关闭；同线程复审给出 VRS1-only RELEASE、无剩余 P1/P2，PR #5 以 merge commit `3bbbc42…` 合入 `main`，post-merge Linux/Windows CI 全绿。
 - **完整 P0：未关闭**。详见 [FR-001～FR-024 覆盖矩阵](HPI_FR_coverage_matrix.md)。
 
 已实现的试点能力：
@@ -213,4 +213,4 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 14. write worker 必须逐段锚定 cwd，atomic no-replace，不跟随替换后的 parent/target；POSIX reopen 必须验证 0700/0600、owner 与单 link；
 15. store 外项目权威文件前后 SHA 不变；historical PASS 在 current Gate/source 漂移或不可用时不得由 runtime 或投影显示为当前 PASS；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并。
 
-GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。0.6 VRS1 merge tree `54b6573…` 的早期本地 RELEASE 结论已被最终 Sol 审计 job `29d0ee3f…` 的 BLOCK 覆盖；当前 corrective candidate 必须重新通过精确提交复审与 Linux/Windows CI，且任何后续 RELEASE 仍不得外推为正式 TS-001、完整 P0、HumanResult 或 canonical 接受。
+GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。0.6 初始 VRS1 merge commit `5c10b42…`（tree `54b6573…`）的早期本地 RELEASE 曾被 Sol job `29d0ee3f…` 的 BLOCK 覆盖；corrective commit `cd64c07…` 随后经独立精确提交确认和 Sol 同线程 job `2579940c…` 复审均给出 VRS1-only RELEASE、无剩余 P1/P2，以 `3bbbc42…` 合入 `main`，post-merge CI run `33466115725` 三项全绿。该 RELEASE 不得外推为正式 TS-001、完整 P0、HumanResult 或 canonical 接受。
