@@ -6,7 +6,7 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 
 - **TS-001 Adapter `ts001-pilot/0.1.0`**：冻结的自包含试点，只读本目录三份材料；机器状态保持 `NOT-RUN`。
 - **Package `0.5.0` 只读基线**：精确提交 `c79542b…` 经独立复审给出 RELEASE，并以 merge commit `5cbc57a…` 合入 `main`；TS-001 仍为 `NOT-RUN`。
-- **Package `0.6.0` implementation candidate**：新增经批准的 Validation Runtime Slice V1；在独立复审与 CI 完成前不称为发布通过。
+- **Package `0.6.0` corrective candidate**：Validation Runtime Slice V1 已合并，但最终 Sol 防御性审计对 merge tree 给出 BLOCK；当前分支正在关闭 write-TOCTOU、forged-ledger PASS 与 persisted-mode 三项缺口，精确修复提交复审前不称为 RELEASE。
 - **完整 P0：未关闭**。详见 [FR-001～FR-024 覆盖矩阵](HPI_FR_coverage_matrix.md)。
 
 已实现的试点能力：
@@ -79,7 +79,7 @@ v2 没有原地修补 v1。它修正 host-independent scoped path，并由 compa
 
 完整设计与权威矩阵见 [`validation-runtime-slice-v1-design.md`](validation-runtime-slice-v1-design.md)。V1 固定状态机为 `DECLARED → ACCEPTED → RUNNING → TERMINAL`，并只对自身 attempt history、receipt 与 replay identity 有权威。五个局部 Gate 为 `V1_SCHEMA`、`V1_IDENTITY`、`V1_REFERENCE`、`V1_WORKSPACE`、`V1_AUTHORITY`。
 
-attempt store 使用 exclusive lock、0600 文件、0700 store 目录、temp + fsync + atomic rename。crash 后保留 non-terminal/lock 证据，不实现 stale-lock reclaim 或自动续跑。受限投影使用 Adapter label `ts001-validation-runtime/0.1.0`，primary task 的 human axis 固定 `NOT_NEEDED`，同时保留正式 TS-001 work item 的 `NOT-RUN`；若当前 Adapter source 已漂移，历史局部 PASS 只在 ledger 中保留，当前投影降为 `INCOMPLETE`。删除隔离 store 只删除验证历史，不回滚或修改项目语义状态。
+attempt store 使用 exclusive lock、0700 store 目录和 0600 文件。写入由隔离子进程从经 device/inode + realpath 核对的 cwd 逐段锚定，temp 写入并 fsync 后以 hard-link 发布实现 atomic no-replace；目标出现、目录替换、unsafe mode/link count 均 fail closed。crash 后保留 non-terminal/lock 证据，不实现 stale-lock reclaim 或自动续跑。受限投影使用 Adapter label `ts001-validation-runtime/0.1.0`，primary task 的 human axis 固定 `NOT_NEEDED`，同时保留正式 TS-001 work item 的 `NOT-RUN`；历史局部 PASS 只有在 persisted Gate/fact 与共享 canonical derivation 精确一致、当前五 Gate 重新验证通过且 Adapter source 未漂移时才保持 current PASS，否则降为 `INCOMPLETE` 或 `null`。删除隔离 store 只删除验证历史，不回滚或修改项目语义状态。
 
 ## 结构
 
@@ -89,7 +89,7 @@ src/adapters/                         Adapter contract、registry、有界权威
 src/wire.mjs                           interaction camelCase → snake_case codec
 src/execution.mjs                      execution 公共 facade
 src/execution/                         contract、codecs、retry/replay/stale 纯函数
-src/validation-runtime/                intake、Gate、contract/codecs、隔离 store、runtime 与受限投影
+src/validation-runtime/                intake、Gate、contract/codecs、canonical semantics、cwd-anchored store worker、runtime 与受限投影
 src/validation-runtime.mjs             validation runtime 公共 facade
 src/wire-schema.mjs                    schema lineage manifest/hash/dependency fail-closed loader
 schemas/                               冻结的 hpi/wire/v1 JSON Schema 与 manifest
@@ -164,7 +164,7 @@ hpi_validation(op="run", manifestPath=".pi/validation-inputs/<manifest>.json")
 hpi_validation(op="status", attemptId="<attempt-id>")
 ```
 
-先 preview 再 run。preview 零写入；run 只写 attempt 专属隔离根。相同 input 的 terminal replay 不追加；同 attempt ID 的 divergent input 返回 conflict；non-terminal history 只解释为 `INCOMPLETE_INTERRUPTED`，重试必须使用新 ID 与精确 `retry_of`。`runtime.machineResult` / status 顶层 `machineResult` 始终按当前 TS-001 read-only snapshot 重新限定；不可用时为 `null`，漂移时降为 `INCOMPLETE`。`history.machineResult` / `historicalMachineResult` 只是不可变历史，不得作为当前 PASS。该工具的 `PASS-ENGINEERING` 只属于 V1 局部 Gate，不是正式 TS-001、P0、HumanResult 或 canonical 接受。
+先 preview 再 run。preview 零写入；run 只写 attempt 专属隔离根。相同 input 的 terminal replay 不追加；同 attempt ID 的 divergent input 返回 conflict；non-terminal history 只解释为 `INCOMPLETE_INTERRUPTED`，重试必须使用新 ID 与精确 `retry_of`。`runtime.machineResult` / status 顶层 `machineResult` 始终重新验证当前五 Gate 与 TS-001 read-only snapshot；不可用时为 `null`，任一 Gate 或 source 漂移时降为 `INCOMPLETE`。`history.machineResult` / `historicalMachineResult` 只是不可变历史，不得作为当前 PASS。该工具的 `PASS-ENGINEERING` 只属于 V1 局部 Gate，不是正式 TS-001、P0、HumanResult 或 canonical 接受。
 
 `hpi_propose(op="escalation")` 不再从任意自然语言 mint HumanEscalationRequest。候选必须绑定 projector 当前产生的 `requestId + requestDigest + sourceDigest`；regex 仅作为额外机器事实拒绝层。`talk_poll_events` 返回的 HPI 事件仍必须完整传给 `hpi_propose(op="ingest_talk_event")`。
 
@@ -208,8 +208,9 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 9. outbox v2 将完整 candidate digest 绑定到 receipt；同 `eventId` 不同 digest 产生确定性 `CANDIDATE_IDENTITY_CONFLICT` 且不恢复任一候选；malformed entry 只隔离单条；
 10. scoped path 跨平台 fail closed，timestamp codec 成功的对象必须通过 frozen schema；
 11. Adapter 与 validation intake 不跟随 symlink、不读取非普通或超限输入；ref SHA 必须等于原始 bytes；
-12. validation record 必须连续、内容寻址并完整绑定五个 Gate；PASS MachineResult 必须一 Gate 一 fact 且引用 immutable RUNNING record；
+12. validation record 必须连续、内容寻址并完整绑定五个 Gate；所有成功 code/evidence 与 MachineResult kind/statement/evidence/limitations 必须等于共享 canonical derivation；
 13. exact replay 零追加；divergent attempt conflict；fresh process 中 non-terminal 永不恢复成完成，残留 lock 不自动夺取；
-14. store 外项目权威文件前后 SHA 不变；historical PASS 在 current-source 漂移/不可用时不得由 runtime 或投影显示为当前 PASS；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并。
+14. write worker 必须逐段锚定 cwd，atomic no-replace，不跟随替换后的 parent/target；POSIX reopen 必须验证 0700/0600、owner 与单 link；
+15. store 外项目权威文件前后 SHA 不变；historical PASS 在 current Gate/source 漂移或不可用时不得由 runtime 或投影显示为当前 PASS；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并。
 
-GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。0.6 Validation Runtime Slice V1 候选也已完成独立源码复审（RELEASE、无剩余 P1/P2）及 Linux/Windows CI；该结论仍只覆盖 VRS1，不得据此宣称正式 TS-001、完整 P0、HumanResult 或 canonical 接受。
+GitHub 私有仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。0.6 VRS1 merge tree `54b6573…` 的早期本地 RELEASE 结论已被最终 Sol 审计 job `29d0ee3f…` 的 BLOCK 覆盖；当前 corrective candidate 必须重新通过精确提交复审与 Linux/Windows CI，且任何后续 RELEASE 仍不得外推为正式 TS-001、完整 P0、HumanResult 或 canonical 接受。

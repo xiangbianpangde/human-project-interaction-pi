@@ -29,7 +29,9 @@ The schema expresses closed snake_case shape. Companion validation under `src/va
 - exact isolated write root;
 - immutable input/record revisions;
 - contiguous lifecycle, canonical five-Gate order, phase semantics and previous-record linkage;
-- terminal MachineResult scope/verdict plus exactly one Gate-bound fact per Gate, citing the immutable RUNNING record for VERIFIED facts;
+- terminal MachineResult scope/verdict plus exactly one Gate-bound fact per Gate, with success code/evidence and fact kind/statement/evidence/limitations exactly equal to the shared canonical derivation;
+- current Gate re-evaluation before a persisted historical PASS can remain current;
+- cwd-anchored store publication, atomic hard-link no-replace, and private persisted-file checks outside the frozen wire shape;
 - exact replay versus divergent identity conflict;
 - interrupted-attempt and retry-as-new-attempt behavior.
 

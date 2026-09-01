@@ -213,12 +213,13 @@ function validateReferences(projectRoot, intake) {
   return snapshot;
 }
 
-function validateWorkspace(projectRoot, intake) {
+function validateWorkspace(projectRoot, intake, options = {}) {
   const { input, manifestPointer } = intake;
   inspectValidationStoreBoundary(projectRoot, input.validationAttemptId);
   if (
-    manifestPointer === input.isolatedWriteRoot ||
-    manifestPointer.startsWith(`${input.isolatedWriteRoot}/`)
+    !options.persistedSnapshot &&
+    (manifestPointer === input.isolatedWriteRoot ||
+      manifestPointer.startsWith(`${input.isolatedWriteRoot}/`))
   ) {
     fail("WORKSPACE_MANIFEST_OVERLAP", "manifest must be outside the isolated write root");
   }
@@ -250,7 +251,7 @@ function validateAuthority(intake) {
   return intake.input.authority;
 }
 
-export function evaluateValidationAttemptGates(projectRoot, intake) {
+export function evaluateValidationAttemptGates(projectRoot, intake, options = {}) {
   const refs = allInputRefs(intake.input);
   const outcomes = [];
   const errors = [];
@@ -287,7 +288,7 @@ export function evaluateValidationAttemptGates(projectRoot, intake) {
     {
       name: "V1_WORKSPACE",
       evidence: [intake.manifestRef],
-      run: () => validateWorkspace(projectRoot, intake),
+      run: () => validateWorkspace(projectRoot, intake, options),
       passed: "WORKSPACE_VERIFIED",
       failed: "WORKSPACE_REJECTED",
     },
@@ -332,6 +333,22 @@ export function evaluateValidationAttemptGates(projectRoot, intake) {
     referenceSnapshot,
     projectCanonicalChanged: false,
   };
+}
+
+export function reevaluateStoredValidationAttemptGates(projectRoot, history) {
+  if (!history?.inputManifest || !history?.inputRef) {
+    fail("STORED_INPUT_MISSING", "persisted Gate re-evaluation requires one immutable input snapshot");
+  }
+  return evaluateValidationAttemptGates(projectRoot, {
+    schema: "hpi/validation-attempt-intake/v1",
+    manifestPointer: history.inputRef.pointer,
+    rawBytes: Buffer.alloc(0),
+    rawDigest: history.inputRef.sha256,
+    wire: undefined,
+    input: history.inputManifest,
+    manifestRef: history.inputRef,
+    projectCanonicalChanged: false,
+  }, { persistedSnapshot: true });
 }
 
 export function previewValidationAttempt(projectRoot, manifestPointer) {

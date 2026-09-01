@@ -45,7 +45,7 @@ HPI is a deterministic interaction adapter, not Harness Core.
 - Supported adapters are currently `ts001-pilot/0.1.0` and `ricl-v4-readonly/0.1.0`; neither grants write authority.
 - External interoperability uses immutable interaction v1, preserved execution v1, and current `hpi/wire/execution/v2` with snake_case-only keys; camelCase remains internal.
 - Generic execution codecs/lifecycle helpers can only validate or return candidate/preview data; they cannot dispatch Agents, accept Bundles, commit Results, invalidate canonical state, or create HumanResult.
-- `hpi_validation` is a separate machine-only slice: preview is zero-write; run writes only `.pi/artifacts/hpi-validation/v1/<attempt_id>` and has authority only over that attempt history.
+- `hpi_validation` is a separate machine-only slice: preview is zero-write; run uses a cwd-anchored, atomic-no-replace worker and writes only `.pi/artifacts/hpi-validation/v1/<attempt_id>`; it has authority only over that attempt history.
 - A validation-runtime-v1 local `PASS-ENGINEERING` never changes formal TS-001 `NOT-RUN`, P0, Human status, CandidateEvent, HumanResult, or project canonical state.
 - If the adapter, any wire-schema lineage member/dependency, source revision, evidence, or canonical writer is unavailable or drifted, fail closed and say so; never scan drafts/raw trees to invent a replacement truth source.
 
@@ -90,7 +90,7 @@ Do not create or discover a manifest from chat, prose, drafts, or adjacent files
 
 - `hpi_validation(op="preview")` must be used before `run`; preview writes nothing.
 - `run` may append only the isolated attempt ledger and returns a scoped MachineResult.
-- Use only the runtime/status top-level `machineResult` as the current result. `history.machineResult` and `historicalMachineResult` are immutable history; current-source drift lowers the top-level result to `INCOMPLETE`, and an unavailable current base makes it `null`.
+- Use only the runtime/status top-level `machineResult` as the current result. `history.machineResult` and `historicalMachineResult` are immutable history; persisted success must match the shared canonical Gate/fact derivation, current Gates are re-evaluated, Gate/source drift lowers the top-level result to `INCOMPLETE`, and an unavailable current base makes it `null`.
 - `status` reads one explicit attempt ID; non-terminal history is `INCOMPLETE_INTERRUPTED`, never successful completion.
 - Exact terminal replay appends nothing. Divergent input under the same attempt ID is a conflict. Retry requires a new attempt ID and exact `retry_of` latest-record binding.
 - Always say “validation-runtime-v1 局部结果”; if local PASS is shown, state in the same sentence that formal TS-001 remains NOT-RUN and no independent Validation Agent ran.

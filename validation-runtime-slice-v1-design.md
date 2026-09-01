@@ -97,8 +97,9 @@ manifest 只能声明：
 .pi/artifacts/hpi-validation/v1/<validation_attempt_id>/
 ```
 
-- 每一级必须是非 symlink 目录；
-- 目录 mode 0700，文件 mode 0600（平台支持时）；
+- 写 worker 在独立子进程内从 project root 开始，使用 device/inode + realpath 逐段 `chdir` 锚定每一级非 symlink 目录，避免检查后的 parent substitution 被后续 open 跟随；
+- final temp/target 使用 no-follow，目录 mode 0700、文件 mode 0600；POSIX reopen 同时验证 owner 与单 hard-link；
+- Windows 不声明 POSIX mode/link-count 语义，但 hard-link no-replace 不可用时必须 fail closed；
 - 不允许调用方扩大写根；
 - 不写 source、schema、fixture、README、canonical、worklog 或 Pi session 文件；
 - network 固定 DENY。
@@ -220,10 +221,10 @@ DECLARED → ACCEPTED → RUNNING → TERMINAL
     owner.json
 ```
 
-- temp 文件先以 exclusive create 写入、fsync，再 atomic rename；
-- accepted record 发布后 fsync 其目录；
-- 目标文件存在时只允许 byte-equivalent replay；
-- attempt lock 使用 atomic directory create；正常退出删除；异常残留不自动夺锁；
+- temp 文件在已锚定 cwd 中以 exclusive/no-follow create 写入并 fsync，再通过 `link(temp, target)` 原子发布；该 hard-link 操作提供 no-replace，绝不 rename-overwrite 并发出现的 target；
+- 发布后删除 temp 并 fsync 目录；link→unlink 间 crash 留下的 temp 作为可见 incomplete evidence fail closed，不自动清理；
+- 目标文件存在时必须是 private、regular、non-symlink、bounded 且 byte-equivalent，才允许 replay；
+- attempt lock 使用锚定 cwd 中的 atomic directory create 和 token-bound owner；正常退出只释放同 token lock，异常残留不自动夺锁；
 - 残留 lock、temp 文件、sequence 缺口、chain mismatch、未知文件或 revision mismatch 均 fail closed；
 - crash 后以新 attempt retry，不实现 stale-lock reclaim 或通用 Reconciler。
 
@@ -257,7 +258,8 @@ Store 只对自身 attempt history 有权威。删除整个 store 必须只影�
 - primary task 是 validation-only task，`humanStatus=NOT_NEEDED`；
 - project/milestone authority 仍保持 `INCOMPLETE`，不得把 TS-001 `test_status` 改出 `NOT-RUN`；
 - 可更新的只有 validation attempt status、machine evidence summary、limitations、unresolved 和 latest machine change；
-- 当前 base source 若不再匹配历史 result 引用，ledger 保留历史字节，runtime/status 顶层 `machineResult` 与当前投影均降为 `INCOMPLETE`；base 不可用时顶层 current result 为 `null`。`history.machineResult` / `historicalMachineResult` 只代表不可变历史，不得自动 invalidation、改写历史或宣称当前 PASS；
+- persisted success 必须重新导出为共享 canonical semantics：Gate success code/evidence、fact id/kind/statement/status/evidence、limitations 与 unresolved 全部精确闭合；仅结构自洽且可重算 revision 的 ledger 不足以产生 PASS；
+- 每次返回 current PASS 前重新执行当前五 Gate。当前 Gate 或 base source 不再匹配历史结果时，ledger 保留历史字节，runtime/status 顶层 `machineResult` 与当前投影均降为 `INCOMPLETE`；base 不可用时顶层 current result 为 `null`。`history.machineResult` / `historicalMachineResult` 只代表不可变历史，不得自动 invalidation、改写历史或宣称当前 PASS；
 - 不创建 HumanResult、Pain/Design 接受或 canonical provenance。
 
 ## 12. `/reload` 与 fresh-process 验收
@@ -299,7 +301,8 @@ Developer conformance lane 可重复运行 TS-001 风格的 schema、ref、path�
 - manifest closed schema 与 companion validator 一致；
 - 全部 ref 原始 bytes hash 匹配；
 - preview 零写入；
-- run 只写隔离 store；
+- run 只写隔离 store；parent substitution race 不跟随 replacement，concurrent target 不覆盖；
+- persisted all-PASSED Gate/fact surface 与 canonical derivation 精确相等，五 Gate forged ledger 拒绝；
 - exact replay 不追加；
 - divergent attempt conflict；
 - retry 新 attempt；
@@ -311,7 +314,7 @@ Developer conformance lane 可重复运行 TS-001 风格的 schema、ref、path�
 - formal TS-001 保持 NOT-RUN；
 - Extension 在 unsupported/untrusted project fail closed；
 - `/reload` stale identity 零写入；
-- Windows/Linux contract、store 与 runtime 验证通过；POSIX `SIGKILL` crash 语义仅在 Linux 验证。
+- Windows/Linux contract、store 与 runtime 验证通过；POSIX parent-swap、mode/link-count 与 `SIGKILL` crash 语义仅在 Linux/macOS 验证，Windows 验证 hard-link no-replace 与 fail-closed behavior。
 
 ## 16. 明确后置
 
