@@ -32,6 +32,24 @@ export const TS001_DATA_CLASSES = Object.freeze(["INTERNAL", "CONFIDENTIAL", "PU
 
 export const TS001_VAL_VERDICTS = Object.freeze(["CONFORMANT", "NON-CONFORMANT", "INCOMPLETE"]);
 
+export const TS001_CANONICAL_INVARIANT_CASES = Object.freeze({
+  "INV-002": ["TS1-S-010"],
+  "INV-004": ["TS1-P-001"],
+  "INV-005": ["TS1-P-002"],
+  "INV-007": ["TS1-P-003"],
+  "INV-011": ["TS1-I-003", "TS1-I-004"],
+  "INV-012": ["TS1-S-011"],
+  "INV-016": ["TS1-S-008", "TS1-P-006"],
+});
+
+export const TS001_REQUIRED_GATES = Object.freeze([
+  "G-002",
+  "G-011",
+  "G-014",
+  "G-SCHEMA",
+  "G-PERMISSION",
+]);
+
 export class Ts001ValidationError extends Error {
   constructor(code, message, details = {}) {
     super(`[${code}] ${message}`);
@@ -119,6 +137,84 @@ export function validateTs001RollbackSupersedes({ oldRef, newRevision, supersede
   }
   if (supersedesRef.id !== oldRef.id || supersedesRef.revision !== oldRef.revision) {
     fail("TS001_SUPERSEDES_MISMATCH", "supersedes ref must match old record exactly");
+  }
+  return true;
+}
+
+export function assertUniqueEntityIds(records, path = "records") {
+  if (!Array.isArray(records)) fail("TS001_RECORDS_TYPE", `${path} must be an array`);
+  const seen = new Set();
+  for (const [index, record] of records.entries()) {
+    const id = record?.entity_id || record?.id;
+    if (!id || typeof id !== "string") {
+      fail("TS001_ENTITY_ID_MISSING", `${path}[${index}] missing entity_id or id`);
+    }
+    if (seen.has(id)) {
+      fail("TS001_DUPLICATE_ENTITY_ID", `duplicate entity_id detected: ${id} (INV-002)`);
+    }
+    seen.add(id);
+  }
+  return true;
+}
+
+export function assertRequiredGateConfig(gateConfig, path = "gateConfig") {
+  if (!gateConfig || typeof gateConfig !== "object") {
+    fail("TS001_GATE_CONFIG_MISSING", `missing Gate configuration at ${path}: fail closed immediately (INV-012)`);
+  }
+  for (const gate of TS001_REQUIRED_GATES) {
+    if (!gateConfig[gate] || gateConfig[gate].enabled !== true) {
+      fail("TS001_GATE_CONFIG_MISSING", `required Gate ${gate} missing or disabled: fail closed immediately (INV-012)`);
+    }
+  }
+  return true;
+}
+
+export function verifyArtifactReference(artifactRef, actualBytes, path = "artifact") {
+  if (!artifactRef || typeof artifactRef !== "object" || !artifactRef.sha256) {
+    fail("TS001_ARTIFACT_REF_INVALID", `${path} missing artifactRef or sha256 (INV-005)`);
+  }
+  if (actualBytes === undefined || actualBytes === null) {
+    fail("TS001_ARTIFACT_NOT_FOUND", `${path} artifact not found on filesystem (INV-005)`);
+  }
+  const computedHash = sha256(actualBytes);
+  if (computedHash !== artifactRef.sha256) {
+    fail(
+      "TS001_ARTIFACT_HASH_MISMATCH",
+      `${path} artifact hash mismatch: expected ${artifactRef.sha256}, got ${computedHash} (INV-005)`,
+      { expected: artifactRef.sha256, actual: computedHash },
+    );
+  }
+  return true;
+}
+
+export function validatePathPermission(targetPath, permissionScope, path = "path") {
+  if (typeof targetPath !== "string" || !targetPath.trim()) {
+    fail("TS001_PATH_INVALID", `${path} must be a non-empty string`);
+  }
+  if (!permissionScope || typeof permissionScope !== "object") {
+    fail("TS001_SCOPE_INVALID", "permissionScope is required");
+  }
+  const allowed = Array.isArray(permissionScope.allowed_paths) ? permissionScope.allowed_paths : [];
+  const forbidden = Array.isArray(permissionScope.forbidden_paths) ? permissionScope.forbidden_paths : [];
+
+  const matchesPattern = (p) => {
+    if (p.endsWith("/**")) {
+      const dirPrefix = p.slice(0, -3) + "/";
+      const exactDir = p.slice(0, -3);
+      return targetPath === exactDir || targetPath.startsWith(dirPrefix);
+    }
+    return targetPath === p;
+  };
+
+  const isForbidden = forbidden.some(matchesPattern);
+  const isAllowed = allowed.some(matchesPattern);
+
+  if (isForbidden || !isAllowed) {
+    fail(
+      "TS001_PERMISSION_OUTSIDE_ALLOWLIST",
+      `write to path outside allowlist or in forbidden scope: ${targetPath} (INV-007)`,
+      { targetPath, allowed, forbidden },
+    );
   }
   return true;
 }

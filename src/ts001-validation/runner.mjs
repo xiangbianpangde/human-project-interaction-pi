@@ -2,8 +2,8 @@ import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { sha256 } from "../contracts.mjs";
 import {
   classifyResultSubmission,
@@ -24,11 +24,15 @@ import {
   TS001_TASK_IMPL,
   TS001_TASK_VAL,
   Ts001ValidationError,
+  assertRequiredGateConfig,
+  assertUniqueEntityIds,
+  validatePathPermission,
   validateTs001BlindReview,
   validateTs001RollbackSupersedes,
   validateTs001TaskSlice,
   validateTs001ThreeLayerHash,
   validateTs001ValidationVerdict,
+  verifyArtifactReference,
 } from "./contract.mjs";
 import { Ts001ValidationAgent } from "./agent.mjs";
 
@@ -54,25 +58,41 @@ export function createAjvValidator() {
   return ajv;
 }
 
-function resolveCandidateRef() {
+export function resolveCandidateRef({ expectedCommit, expectedTree } = {}) {
+  let observedCommit;
+  let observedTree;
   try {
-    const commitSha = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
-    const commitDigest = sha256(`git:commit:${commitSha}`);
-    return {
-      id: `COMMIT-${commitSha.slice(0, 8)}`,
-      revision: commitSha,
-      sha256: commitDigest,
-      pointer: `git:commit/${commitSha}`,
-    };
-  } catch {
-    const commitSha = "c97afd98180f592b9d48c800145f41d8015b879e";
-    return {
-      id: "COMMIT-c97afd98",
-      revision: commitSha,
-      sha256: sha256(`git:commit:${commitSha}`),
-      pointer: `git:commit/${commitSha}`,
-    };
+    observedCommit = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    observedTree = execSync("git rev-parse HEAD^{tree}", { encoding: "utf8" }).trim();
+  } catch (err) {
+    throw new Ts001ValidationError(
+      "CANDIDATE_GIT_UNRESOLVABLE",
+      `failed to resolve git candidate identity from repository: ${err.message}`,
+    );
   }
+
+  if (expectedCommit && observedCommit !== expectedCommit) {
+    throw new Ts001ValidationError(
+      "CANDIDATE_COMMIT_MISMATCH",
+      `candidate commit mismatch: expected ${expectedCommit}, got ${observedCommit}`,
+      { expectedCommit, observedCommit },
+    );
+  }
+  if (expectedTree && observedTree !== expectedTree) {
+    throw new Ts001ValidationError(
+      "CANDIDATE_TREE_MISMATCH",
+      `candidate tree mismatch: expected ${expectedTree}, got ${observedTree}`,
+      { expectedTree, observedTree },
+    );
+  }
+
+  const treeDigest = sha256(`git:tree:${observedTree}`);
+  return {
+    id: `COMMIT-${observedCommit.slice(0, 8)}`,
+    revision: observedCommit,
+    sha256: treeDigest,
+    pointer: `git:commit/${observedCommit}`,
+  };
 }
 
 export function buildCompliantResultBundle({
@@ -173,7 +193,9 @@ export function buildCompliantResultBundle({
 export async function runTs001AcceptanceSuite({
   fixturesRoot = "tests/fixtures/ts001",
   agent = new Ts001ValidationAgent(),
-  candidateRef = resolveCandidateRef(),
+  expectedCommit,
+  expectedTree,
+  candidateRef = resolveCandidateRef({ expectedCommit, expectedTree }),
 } = {}) {
   const ajv = createAjvValidator();
   const manifest = JSON.parse(readFileSync(join(fixturesRoot, "manifest.json"), "utf8"));
@@ -220,6 +242,7 @@ export async function runTs001AcceptanceSuite({
       command: "ajv.validate('urn:hpi:wire:task-slice:v2', implTask)",
       inputContent: implTask,
       evidencePointer: "tests/fixtures/ts001/task-slices/ts001-impl.v2.json",
+      invariantsCovered: [],
       execute: async () => {
         const validate = ajv.getSchema("urn:hpi:wire:task-slice:v2");
         const valid = validate(implTask);
@@ -237,6 +260,7 @@ export async function runTs001AcceptanceSuite({
       command: "ajv.validate('urn:hpi:wire:handoff-bundle:v2', handoffBundle)",
       inputContent: handoffBundle,
       evidencePointer: "tests/fixtures/ts001/handoff-bundles/valid.v2.json",
+      invariantsCovered: [],
       execute: async () => {
         const validate = ajv.getSchema("urn:hpi:wire:handoff-bundle:v2");
         const valid = validate(handoffBundle);
@@ -253,6 +277,8 @@ export async function runTs001AcceptanceSuite({
       name: "合法 ResultBundle fixture",
       command: "ajv.validate('urn:hpi:wire:result-bundle:v2', validResultBundle)",
       inputContent: validResultBundle,
+      evidencePointer: "tests/fixtures/ts001/result-bundles/valid.v2.json",
+      invariantsCovered: [],
       execute: async () => {
         const validate = ajv.getSchema("urn:hpi:wire:result-bundle:v2");
         const valid = validate(validResultBundle);
@@ -270,6 +296,7 @@ export async function runTs001AcceptanceSuite({
       command: "validateExperimentSpecWithResolvedProtocol(experimentSpec)",
       inputContent: experimentSpec,
       evidencePointer: "tests/fixtures/ts001/experiment-specs/e017.v4.json",
+      invariantsCovered: [],
       execute: async () => {
         // 1. Schema 严格校验
         const validate = ajv.getSchema("urn:hpi:wire:experiment-spec:v1");
@@ -299,6 +326,8 @@ export async function runTs001AcceptanceSuite({
       name: "删除任一必填字段拒绝（覆盖四份 Schema）",
       command: "validateMissingRequiredFieldAcrossAllFourSchemas()",
       inputContent: { check: "missing_required_all_four" },
+      evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-005.json",
+      invariantsCovered: [],
       execute: async () => {
         const taskSchema = ajv.getSchema("urn:hpi:wire:task-slice:v2");
         const handoffSchema = ajv.getSchema("urn:hpi:wire:handoff-bundle:v2");
@@ -334,6 +363,8 @@ export async function runTs001AcceptanceSuite({
       name: "将字段替换为错误类型拒绝（覆盖四份 Schema）",
       command: "validateTypeMismatchAcrossAllFourSchemas()",
       inputContent: { check: "type_mismatch_all_four" },
+      evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-006.json",
+      invariantsCovered: [],
       execute: async () => {
         const taskSchema = ajv.getSchema("urn:hpi:wire:task-slice:v2");
         const handoffSchema = ajv.getSchema("urn:hpi:wire:handoff-bundle:v2");
@@ -365,6 +396,8 @@ export async function runTs001AcceptanceSuite({
       name: "使用不符合格式的 TS001-IMPL/TS001-VAL ID 拒绝",
       command: "validateTs001TaskSlice({ ...implTask, task_id: 'UNKNOWN-TASK' })",
       inputContent: { ...implTask, task_id: "UNKNOWN-TASK" },
+      evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-007.json",
+      invariantsCovered: [],
       execute: async () => {
         try {
           validateTs001TaskSlice({ ...implTask, task_id: "UNKNOWN-TASK" });
@@ -386,6 +419,7 @@ export async function runTs001AcceptanceSuite({
       name: "使用封闭枚举外或缺失的 data_class 拒绝",
       command: "validateTs001TaskSlice({ ...implTask, permission_scope: { data_classes: ['FORBIDDEN_RESTRICTED'] } })",
       inputContent: { ...implTask, permission_scope: { data_classes: ["FORBIDDEN_RESTRICTED"] } },
+      evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-008.json",
       invariantsCovered: ["INV-016"],
       execute: async () => {
         try {
@@ -411,6 +445,8 @@ export async function runTs001AcceptanceSuite({
       name: "VAL verdict 使用词表外值或 PASS/approved 拒绝",
       command: "validateTs001ValidationVerdict('PASS')",
       inputContent: "PASS",
+      evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-009.json",
+      invariantsCovered: [],
       execute: async () => {
         try {
           validateTs001ValidationVerdict("PASS");
@@ -431,18 +467,19 @@ export async function runTs001AcceptanceSuite({
       caseId: "TS1-S-010",
       name: "两条记录使用相同 entity_id 拒绝",
       command: "assertUniqueEntityIds([record1, record2])",
-      inputContent: [{ entity_id: "ID-001" }, { entity_id: "ID-001" }],
+      inputContent: [{ entity_id: "DUP-001" }, { entity_id: "DUP-001" }],
+      evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-010.json",
       invariantsCovered: ["INV-002"],
       execute: async () => {
-        const ids = new Set();
-        const records = [{ entity_id: "ID-001" }, { entity_id: "ID-001" }];
-        for (const r of records) {
-          if (ids.has(r.entity_id)) {
-            return { status: "REJECTED", exitCode: 2, output: `duplicate entity_id: ${r.entity_id}` };
+        try {
+          assertUniqueEntityIds([{ entity_id: "DUP-001" }, { entity_id: "DUP-001" }]);
+          throw new Error("Expected duplicate entity_id to fail");
+        } catch (err) {
+          if (err.code === "TS001_DUPLICATE_ENTITY_ID") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
           }
-          ids.add(r.entity_id);
+          throw err;
         }
-        throw new Error("Expected duplicate entity_id to be rejected");
       },
     }),
   );
@@ -452,15 +489,20 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-S-011",
       name: "删除 required integrity rule、Schema 或 Gate 配置 fail closed",
-      command: "assertGateConfigPresent(null)",
-      inputContent: null,
+      command: "assertRequiredGateConfig(gateConfigMissingG014)",
+      inputContent: { "G-002": { enabled: true } },
+      evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-011.json",
       invariantsCovered: ["INV-012"],
       execute: async () => {
-        const requiredGateConfig = null;
-        if (!requiredGateConfig) {
-          return { status: "REJECTED", exitCode: 2, output: "missing Gate configuration: fail closed immediately" };
+        try {
+          assertRequiredGateConfig({ "G-002": { enabled: true } });
+          throw new Error("Expected missing gate config to fail closed");
+        } catch (err) {
+          if (err.code === "TS001_GATE_CONFIG_MISSING") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected missing gate config to fail closed");
       },
     }),
   );
@@ -476,6 +518,7 @@ export async function runTs001AcceptanceSuite({
       name: "TaskSlice 的 spec_ref 指向不存在的对象/版本 拒绝",
       command: "resolveSpecRef({ id: 'NON_EXISTENT', pointer: 'tests/fixtures/ts001/non-existent.json' })",
       inputContent: { id: "NON_EXISTENT", pointer: "tests/fixtures/ts001/non-existent.json" },
+      evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-001.json",
       invariantsCovered: ["INV-004"],
       execute: async () => {
         const pointer = "tests/fixtures/ts001/non-existent.json";
@@ -492,16 +535,20 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-P-002",
       name: "ResultBundle 引用不存在 artifact 或 hash 不匹配 拒绝",
-      command: "verifyArtifactHash({ expected: 'aaa...', actual: 'bbb...' })",
+      command: "verifyArtifactReference(artifactRef, actualBytes)",
       inputContent: { expected: "a".repeat(64), actual: "b".repeat(64) },
+      evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-002.json",
       invariantsCovered: ["INV-005"],
       execute: async () => {
-        const expectedHash = "a".repeat(64);
-        const actualHash = "b".repeat(64);
-        if (expectedHash !== actualHash) {
-          return { status: "REJECTED", exitCode: 2, output: "artifact hash mismatch: reject result" };
+        try {
+          verifyArtifactReference({ sha256: "a".repeat(64) }, "b".repeat(64));
+          throw new Error("Expected artifact hash mismatch to fail");
+        } catch (err) {
+          if (err.code === "TS001_ARTIFACT_HASH_MISMATCH") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected artifact hash mismatch to be rejected");
       },
     }),
   );
@@ -513,19 +560,18 @@ export async function runTs001AcceptanceSuite({
       name: "写入 allowlist 外路径 拒绝并保留执行证据",
       command: "validatePathPermission('canonical/state.yaml', implTask.permission_scope)",
       inputContent: { target: "canonical/state.yaml", scope: implTask.permission_scope },
+      evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-003.json",
       invariantsCovered: ["INV-007"],
       execute: async () => {
-        const target = "canonical/state.yaml";
-        const isForbidden = implTask.permission_scope.forbidden_paths.some((p) =>
-          target.startsWith(p.replace("/**", "")),
-        );
-        const isAllowed = implTask.permission_scope.allowed_paths.some((p) =>
-          target.startsWith(p.replace("/**", "")),
-        );
-        if (isForbidden || !isAllowed) {
-          return { status: "REJECTED", exitCode: 2, output: `write to forbidden path rejected: ${target}` };
+        try {
+          validatePathPermission("canonical/state.yaml", implTask.permission_scope);
+          throw new Error("Expected path outside allowlist to fail");
+        } catch (err) {
+          if (err.code === "TS001_PERMISSION_OUTSIDE_ALLOWLIST") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected path outside allowlist to be rejected");
       },
     }),
   );
@@ -537,6 +583,8 @@ export async function runTs001AcceptanceSuite({
       name: "对只读 ExperimentSpec 发起 mutation request fail closed",
       command: "attemptMutationOnFrozenSpec(experimentSpec, { title: 'MODIFIED' })",
       inputContent: { spec: experimentSpec, mutation: { title: "MODIFIED" } },
+      evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-004.json",
+      invariantsCovered: [],
       execute: async () => {
         if (experimentSpec.status === "frozen") {
           return { status: "REJECTED", exitCode: 2, output: "ExperimentSpec is frozen: mutation rejected" };
@@ -553,6 +601,8 @@ export async function runTs001AcceptanceSuite({
       name: "IMPL 未 accepted 或候选 SHA 未冻结时让 VAL 进入 running 拒绝",
       command: "assertValPrerequisites({ implAccepted: false, candidateFrozen: false })",
       inputContent: { implAccepted: false, candidateFrozen: false },
+      evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-005.json",
+      invariantsCovered: [],
       execute: async () => {
         const implAccepted = false;
         if (!implAccepted) {
@@ -570,6 +620,7 @@ export async function runTs001AcceptanceSuite({
       name: "引用未登记来源或缺失 data_class 的数据 拒绝",
       command: "validateDataClassPresence(undefined)",
       inputContent: { data_class: undefined },
+      evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-006.json",
       invariantsCovered: ["INV-016"],
       execute: async () => {
         const dataClass = undefined;
@@ -588,6 +639,8 @@ export async function runTs001AcceptanceSuite({
       name: "使用陈旧 expected_version 提交 拒绝",
       command: "checkOptimisticLock({ current: 2, expected: 1 })",
       inputContent: { current: 2, expected: 1 },
+      evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-007.json",
+      invariantsCovered: [],
       execute: async () => {
         const current = 2;
         const expected = 1;
@@ -610,6 +663,8 @@ export async function runTs001AcceptanceSuite({
       name: "HandoffBundle SHA 不匹配 接收方拒收",
       command: "verifyHandoffSha({ claimed: 'aaa...', computed: 'bbb...' })",
       inputContent: { claimed: "a".repeat(64), computed: "b".repeat(64) },
+      evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-001.json",
+      invariantsCovered: [],
       execute: async () => {
         const claimed = "a".repeat(64);
         const computed = "b".repeat(64);
@@ -628,6 +683,8 @@ export async function runTs001AcceptanceSuite({
       name: "receiver 与 intended identity 不符 接收方拒收",
       command: "assertReceiverIdentity('agent-other', handoffBundle.receiver.agentId)",
       inputContent: { intended: handoffBundle.receiver.agentId, actual: "agent-other" },
+      evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-002.json",
+      invariantsCovered: [],
       execute: async () => {
         const actual = "agent-other";
         if (actual !== handoffBundle.receiver.agentId) {
@@ -645,6 +702,7 @@ export async function runTs001AcceptanceSuite({
       name: "同一 ResultBundle 重复提交 返回既有结果不产生第二次 commit",
       command: "classifyResultSubmission([validResultBundle], validResultBundle)",
       inputContent: validResultBundle,
+      evidencePointer: "tests/fixtures/ts001/result-bundles/valid.v2.json",
       invariantsCovered: ["INV-011"],
       execute: async () => {
         const classification = classifyResultSubmission([validResultBundle], validResultBundle);
@@ -663,6 +721,7 @@ export async function runTs001AcceptanceSuite({
       name: "对已失败 attempt 发起 retry 创建新 attempt，旧记录保留",
       command: "createRetryAttempt(previousFailedAttempt, retryParams)",
       inputContent: { attemptId: "ATTEMPT-TS001-002" },
+      evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-004.json",
       invariantsCovered: ["INV-011"],
       execute: async () => {
         const previousAttempt = toWireAttempt({
@@ -704,21 +763,28 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-I-005",
       name: "提交被拒 拒绝记录与 ResultBundle 保留不静默删除",
-      command: "recordRejectionAuditLedger(rejectedResultBundle)",
-      inputContent: { bundle_id: validResultBundle.bundle_id },
+      command: "persistAndReopenRejectionLedgerRecord(rejectedResultBundle)",
+      inputContent: { bundle_id: validResultBundle.result_bundle_id },
+      evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-005.json",
+      invariantsCovered: [],
       execute: async () => {
-        const ledger = [];
-        const rejectionRecord = {
-          bundle_id: validResultBundle.bundle_id,
+        const rejectionDir = ".pi/artifacts/ts001-validation/rejections";
+        mkdirSync(rejectionDir, { recursive: true });
+        const rejectionPath = join(rejectionDir, `${validResultBundle.result_bundle_id}.json`);
+        const record = {
+          bundle_id: validResultBundle.result_bundle_id,
           bundle_ref: wireRecordRef(validResultBundle, { idKey: "result_bundle_id", revisionKey: "bundle_revision" }),
           rejection_reason: "PRECONDITION_UNMET",
           recorded_at: new Date().toISOString(),
         };
-        ledger.push(rejectionRecord);
-        if (ledger.length === 1 && ledger[0].bundle_ref) {
-          return { status: "PASSED", output: "rejection record and bundle ref durably preserved" };
+        writeFileSync(rejectionPath, JSON.stringify(record, null, 2) + "\n");
+        // Reopen from disk to verify durable preservation
+        if (!existsSync(rejectionPath)) throw new Error("Rejection file not written to disk");
+        const readBack = JSON.parse(readFileSync(rejectionPath, "utf8"));
+        if (readBack.bundle_id !== validResultBundle.result_bundle_id || !readBack.bundle_ref) {
+          throw new Error("Rejection record corrupted on disk");
         }
-        throw new Error("Expected rejection record to be preserved");
+        return { status: "PASSED", output: `rejection record durably written and verified at ${rejectionPath}` };
       },
     }),
   );
@@ -730,6 +796,8 @@ export async function runTs001AcceptanceSuite({
       name: "提交三层 hash 标注 正确区分 worker/coordinator/harness",
       command: "validateTs001ThreeLayerHash(threeLayerHashes)",
       inputContent: { worker: "h1", coordinator: "h1", harness: "h1" },
+      evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-006.json",
+      invariantsCovered: [],
       execute: async () => {
         const res = validateTs001ThreeLayerHash({
           workerReportedHash: "h1",
@@ -751,6 +819,8 @@ export async function runTs001AcceptanceSuite({
       name: "VAL ResultBundle 缺少盲审节 拒绝审核提交",
       command: "validateTs001BlindReview(validResultBundle)",
       inputContent: validResultBundle,
+      evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-007.json",
+      invariantsCovered: [],
       execute: async () => {
         try {
           validateTs001BlindReview(validResultBundle);
@@ -772,6 +842,8 @@ export async function runTs001AcceptanceSuite({
       name: "VAL 读取候选前候选 SHA 已变化 fail closed 退回新 attempt",
       command: "assertCandidateNotDrifted({ preValSha: 'aaa...', readSha: 'bbb...' })",
       inputContent: { preValSha: "a".repeat(64), readSha: "b".repeat(64) },
+      evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-008.json",
+      invariantsCovered: [],
       execute: async () => {
         const preValSha = "a".repeat(64);
         const readSha = "b".repeat(64);
@@ -794,6 +866,8 @@ export async function runTs001AcceptanceSuite({
       name: "恢复上一份共享合同/TaskSlice revision 创建新 revision 并建立 supersedes",
       command: "validateTs001RollbackSupersedes({ oldRef, newRevision: '2', supersedesRef, g014Approved: true, g011Approved: true })",
       inputContent: { oldRevision: "1", newRevision: "2", supersedes: "1" },
+      evidencePointer: "tests/fixtures/ts001/cases/rollback/TS1-R-001.json",
+      invariantsCovered: [],
       execute: async () => {
         const oldRef = { id: "TASK-001", revision: "1" };
         const supersedesRef = { id: "TASK-001", revision: "1" };
@@ -816,8 +890,9 @@ export async function runTs001AcceptanceSuite({
       name: "回滚后重算引用、SHA 与链接 完整无残桩",
       command: "mechanicallyScanAllReferencesAndStubs()",
       inputContent: { scanTarget: "tests/fixtures/ts001" },
+      evidencePointer: "tests/fixtures/ts001/manifest.json",
+      invariantsCovered: [],
       execute: async () => {
-        // 机械扫描全部资产与引用，核对文件存在性、哈希一致性以及 README digest 匹配度
         const missingFiles = [];
         const hashMismatches = [];
 
@@ -836,8 +911,8 @@ export async function runTs001AcceptanceSuite({
         }
 
         // 2. 扫描 protocol fixture
-        const protocolPath = "tests/fixtures/ts001/protocols/protocol-e017.md";
-        if (!existsSync(protocolPath)) missingFiles.push(protocolPath);
+        const protocolPath = experimentSpec.protocol_ref?.pointer;
+        if (!protocolPath || !existsSync(protocolPath)) missingFiles.push(protocolPath || "missing_pointer");
         else {
           const actual = createHash("sha256").update(readFileSync(protocolPath)).digest("hex");
           if (actual !== experimentSpec.protocol_ref.sha256) {
@@ -856,8 +931,15 @@ export async function runTs001AcceptanceSuite({
           });
         }
 
+        // 4. 扫描 cases_manifest 中所有 31 个用例的 evidence_pointer 存在性
+        for (const item of manifest.cases_manifest) {
+          if (!item.evidence_pointer || !existsSync(item.evidence_pointer)) {
+            missingFiles.push(item.evidence_pointer || `missing_pointer_for_${item.id}`);
+          }
+        }
+
         if (missingFiles.length === 0 && hashMismatches.length === 0) {
-          return { status: "PASSED", output: "mechanical reference scan passed: zero missing files, zero hash drift, zero orphaned stubs" };
+          return { status: "PASSED", output: "mechanical scan verified 31 cases + authority + schemas: zero orphaned stubs" };
         }
         throw new Error(`Residual stubs detected: missing=${JSON.stringify(missingFiles)}, mismatch=${JSON.stringify(hashMismatches)}`);
       },
@@ -871,13 +953,14 @@ export async function runTs001AcceptanceSuite({
       name: "请求恢复 canonical 文件 没有 G-014 人工批准时拒绝",
       command: "validateTs001RollbackSupersedes({ g014Approved: undefined })",
       inputContent: { g014Approved: undefined },
+      evidencePointer: "tests/fixtures/ts001/cases/rollback/TS1-R-003.json",
+      invariantsCovered: [],
       execute: async () => {
         try {
           validateTs001RollbackSupersedes({
             oldRef: { id: "CANONICAL-001", revision: "1" },
             newRevision: "2",
             supersedesRef: { id: "CANONICAL-001", revision: "1" },
-            // g014Approved omitted/undefined
             g011Approved: true,
           });
           throw new Error("Expected canonical restore without G-014 to fail");
@@ -898,6 +981,8 @@ export async function runTs001AcceptanceSuite({
       name: "请求恢复或改变 fixture 内容 没有 G-011 测试合同 Gate 时拒绝",
       command: "validateTs001RollbackSupersedes({ g011Approved: undefined })",
       inputContent: { g011Approved: undefined },
+      evidencePointer: "tests/fixtures/ts001/cases/rollback/TS1-R-004.json",
+      invariantsCovered: [],
       execute: async () => {
         try {
           validateTs001RollbackSupersedes({
@@ -905,7 +990,6 @@ export async function runTs001AcceptanceSuite({
             newRevision: "2",
             supersedesRef: { id: "FIXTURE-001", revision: "1" },
             g014Approved: true,
-            // g011Approved omitted/undefined
           });
           throw new Error("Expected fixture alteration without G-011 to fail");
         } catch (err) {
@@ -925,11 +1009,13 @@ export async function runTs001AcceptanceSuite({
       name: "回滚过程试图删除/覆盖原始记录 拒绝，原版本保持可追溯",
       command: "validateTs001RollbackSupersedes({ oldRef: { revision: '1' }, newRevision: '1' })",
       inputContent: { oldRevision: "1", newRevision: "1" },
+      evidencePointer: "tests/fixtures/ts001/cases/rollback/TS1-R-005.json",
+      invariantsCovered: [],
       execute: async () => {
         try {
           validateTs001RollbackSupersedes({
             oldRef: { id: "TASK-001", revision: "1" },
-            newRevision: "1", // 同一 revision 原地覆盖
+            newRevision: "1",
             supersedesRef: { id: "TASK-001", revision: "1" },
             g014Approved: true,
             g011Approved: true,

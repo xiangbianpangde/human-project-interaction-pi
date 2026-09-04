@@ -9,6 +9,7 @@ import {
   TS001_DIRECT_INVARIANTS,
   TS001_TASK_IMPL,
   TS001_TASK_VAL,
+  validatePathPermission,
   validateTs001RollbackSupersedes,
 } from "../src/ts001-validation/contract.mjs";
 import { Ts001ValidationAgent } from "../src/ts001-validation/agent.mjs";
@@ -124,13 +125,37 @@ describe("TS-001 formal validation milestone", () => {
     });
     assert.strictEqual(invertedResult.verdict, "NON-CONFORMANT", "Polarity mismatch must fail closed");
 
-    // Incomplete case set
-    const incomplete = agent.compileValidationResult({
+    // Adversarial witness 3: P1-TS001-7 — putting all 7 invariants onto S-001 fails closed
+    const scrambledInvariants = manifest.cases_manifest.map((c) => ({
+      case_id: c.id,
+      status: c.expected === "PASS" ? "PASSED" : "REJECTED",
+      evidence_pointer: c.evidence_pointer,
+      invariants_covered: c.id === "TS1-S-001" ? [...TS001_DIRECT_INVARIANTS] : [],
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    }));
+    const scrambledResult = agent.compileValidationResult({
       candidateRef,
       canonicalManifest: manifest,
-      executedCases: [{ case_id: "TS1-S-001", status: "PASSED", invariants_covered: [] }],
+      executedCases: scrambledInvariants,
     });
-    assert.strictEqual(incomplete.verdict, "NON-CONFORMANT");
+    assert.strictEqual(scrambledResult.verdict, "NON-CONFORMANT", "Unassigned invariant labels must fail closed");
+
+    // Adversarial witness 4: P1-TS001-5 — missing evidence_pointer fails closed
+    const missingEvidencePointer = manifest.cases_manifest.map((c) => ({
+      case_id: c.id,
+      status: c.expected === "PASS" ? "PASSED" : "REJECTED",
+      evidence_pointer: c.id === "TS1-S-003" ? "" : c.evidence_pointer,
+      invariants_covered: c.id === "TS1-S-010" ? ["INV-002"] : [],
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    }));
+    const missingPointerResult = agent.compileValidationResult({
+      candidateRef,
+      canonicalManifest: manifest,
+      executedCases: missingEvidencePointer,
+    });
+    assert.strictEqual(missingPointerResult.verdict, "NON-CONFORMANT", "Missing evidence pointer must fail closed");
   });
 
   it("converts unexpected implementation exceptions to FAILED (P1-TS001-1)", async () => {
@@ -139,6 +164,7 @@ describe("TS-001 formal validation milestone", () => {
       caseId: "TS1-CRASH-TEST",
       name: "crash test",
       command: "throw new TypeError('bug')",
+      evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-005.json",
       execute: async () => {
         throw new TypeError("unexpected null pointer / implementation bug");
       },
@@ -190,5 +216,27 @@ describe("TS-001 formal validation milestone", () => {
       g011Approved: true,
     });
     assert.strictEqual(ok, true);
+  });
+
+  it("enforces boundary-safe path allowlist matching (P1-TS001-3 / INV-007)", () => {
+    const scope = {
+      allowed_paths: ["src/**", "tests/**"],
+      forbidden_paths: ["canonical/**"],
+    };
+
+    // Legitimate path under src/
+    assert.doesNotThrow(() => validatePathPermission("src/index.mjs", scope));
+
+    // Boundary bypass attempt: src-escape/outside.txt must NOT match src/**
+    assert.throws(
+      () => validatePathPermission("src-escape/outside.txt", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+
+    // Forbidden path
+    assert.throws(
+      () => validatePathPermission("canonical/state.yaml", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
   });
 });

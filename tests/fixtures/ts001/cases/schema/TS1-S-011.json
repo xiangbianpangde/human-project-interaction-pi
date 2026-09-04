@@ -1,0 +1,10 @@
+{
+  "stimulus": "missing_gate_config",
+  "required_gates": [
+    "G-002",
+    "G-011",
+    "G-014",
+    "G-SCHEMA",
+    "G-PERMISSION"
+  ]
+}

@@ -54,6 +54,7 @@
           "output_sha256",
           "exit_code",
           "invariants_covered",
+          "evidence_pointer",
           "started_at",
           "completed_at"
         ],

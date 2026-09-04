@@ -10,188 +10,219 @@
       "id": "TS1-S-001",
       "group": "SCHEMA",
       "name": "合法 TaskSlice fixture",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/task-slices/ts001-impl.v2.json"
     },
     {
       "id": "TS1-S-002",
       "group": "SCHEMA",
       "name": "合法 HandoffBundle fixture",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/handoff-bundles/valid.v2.json"
     },
     {
       "id": "TS1-S-003",
       "group": "SCHEMA",
       "name": "合法 ResultBundle fixture",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/result-bundles/valid.v2.json"
     },
     {
       "id": "TS1-S-004",
       "group": "SCHEMA",
       "name": "合法 ExperimentSpec 只读 fixture",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/experiment-specs/e017.v4.json"
     },
     {
       "id": "TS1-S-005",
       "group": "SCHEMA",
       "name": "删除必填字段拒绝",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-005.json"
     },
     {
       "id": "TS1-S-006",
       "group": "SCHEMA",
       "name": "字段类型错误拒绝",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-006.json"
     },
     {
       "id": "TS1-S-007",
       "group": "SCHEMA",
       "name": "不合规 task_id 格式拒绝",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-007.json"
     },
     {
       "id": "TS1-S-008",
       "group": "SCHEMA",
       "name": "封闭枚举外 data_class 拒绝 (INV-016)",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-008.json"
     },
     {
       "id": "TS1-S-009",
       "group": "SCHEMA",
       "name": "VAL verdict 非词表值拒绝",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-009.json"
     },
     {
       "id": "TS1-S-010",
       "group": "SCHEMA",
       "name": "重复 entity_id 拒绝 (INV-002)",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-010.json"
     },
     {
       "id": "TS1-S-011",
       "group": "SCHEMA",
       "name": "缺失 integrity rule/Gate 配置 fail closed (INV-012)",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-011.json"
     },
     {
       "id": "TS1-P-001",
       "group": "PERMISSION_REF",
       "name": "spec_ref 不存在时拒绝 (INV-004)",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-001.json"
     },
     {
       "id": "TS1-P-002",
       "group": "PERMISSION_REF",
       "name": "artifact hash 不符时拒绝 (INV-005)",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-002.json"
     },
     {
       "id": "TS1-P-003",
       "group": "PERMISSION_REF",
       "name": "写入 allowlist 外路径拒绝 (INV-007)",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-003.json"
     },
     {
       "id": "TS1-P-004",
       "group": "PERMISSION_REF",
       "name": "只读 ExperimentSpec 发起 mutation 拒绝 (G-002)",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-004.json"
     },
     {
       "id": "TS1-P-005",
       "group": "PERMISSION_REF",
       "name": "前置未满足时 VAL 拒绝进入 running",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-005.json"
     },
     {
       "id": "TS1-P-006",
       "group": "PERMISSION_REF",
       "name": "引用未登记来源数据拒绝 (INV-016)",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-006.json"
     },
     {
       "id": "TS1-P-007",
       "group": "PERMISSION_REF",
       "name": "陈旧 expected_version 提交拒绝",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-007.json"
     },
     {
       "id": "TS1-I-001",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "HandoffBundle SHA 不匹配拒收",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-001.json"
     },
     {
       "id": "TS1-I-002",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "receiver 与 intended 身份不符拒收",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-002.json"
     },
     {
       "id": "TS1-I-003",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "重发 ResultBundle 幂等不二次 commit (INV-011)",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/result-bundles/valid.v2.json"
     },
     {
       "id": "TS1-I-004",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "retry 创建新 attempt 保留旧记录 (INV-011)",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-004.json"
     },
     {
       "id": "TS1-I-005",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "提交被拒留存记录不静默删除",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-005.json"
     },
     {
       "id": "TS1-I-006",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "三层 hash 标注严格区分 (CT-001)",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-006.json"
     },
     {
       "id": "TS1-I-007",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "VAL ResultBundle 缺盲审节拒绝",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-007.json"
     },
     {
       "id": "TS1-I-008",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "候选 SHA 漂移 fail closed 退回新 attempt",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-008.json"
     },
     {
       "id": "TS1-R-001",
       "group": "ROLLBACK_RECOVERY",
       "name": "回滚创建新 revision 建立 supersedes 不原地覆盖",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-001.json"
     },
     {
       "id": "TS1-R-002",
       "group": "ROLLBACK_RECOVERY",
       "name": "回滚后重算引用 SHA 完整无残桩",
-      "expected": "PASS"
+      "expected": "PASS",
+      "evidence_pointer": "tests/fixtures/ts001/manifest.json"
     },
     {
       "id": "TS1-R-003",
       "group": "ROLLBACK_RECOVERY",
       "name": "恢复 canonical 文件无 G-014 审批时拒绝",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-003.json"
     },
     {
       "id": "TS1-R-004",
       "group": "ROLLBACK_RECOVERY",
       "name": "改变 fixture 无 G-011 Gate 拒绝",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-004.json"
     },
     {
       "id": "TS1-R-005",
       "group": "ROLLBACK_RECOVERY",
       "name": "试图覆盖或删除原始历史记录拒绝",
-      "expected": "REJECT"
+      "expected": "REJECT",
+      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-005.json"
     }
   ],
-  "manifest_digest": "0165aeb29dfe7fc0190bfec23dec89652464ffe8abe3aaa71a838cda45825f04"
+  "manifest_digest": "09d7be08fbd39b663bb71e6ea93c534711d84aa389dca214d4589650616e0991"
 }

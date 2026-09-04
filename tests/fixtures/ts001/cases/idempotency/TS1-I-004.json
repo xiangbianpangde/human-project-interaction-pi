@@ -1,0 +1,5 @@
+{
+  "stimulus": "failed_attempt_retry",
+  "previous_attempt": "ATTEMPT-TS001-001",
+  "retry_attempt": "ATTEMPT-TS001-002"
+}

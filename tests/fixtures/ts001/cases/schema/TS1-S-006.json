@@ -1,0 +1,9 @@
+{
+  "stimulus": "field_type_mismatch",
+  "schemas": [
+    "task-slice",
+    "handoff-bundle",
+    "result-bundle",
+    "experiment-spec"
+  ]
+}

@@ -28,8 +28,8 @@
       "name": "validation_result",
       "id": "urn:hpi:wire:validation-result:v1",
       "path": "validation-result.v1.schema.json",
-      "sha256": "d08e432318791821db7b27407add094409642de6618abbd54eb5b1bbef0b63ba"
+      "sha256": "e1485597c034433d7a5934610cfdc2f0d144be87e99cda069c917c7195ca7594"
     }
   ],
-  "schema_set_digest": "c617eb009d642e053d1c4ec61d835dc040707f575dd20de503cd5c830493c0e0"
+  "schema_set_digest": "ac709a3d740f371e46126f908eb96f4f8448ad0a28ba8d2c97b2ec7155a66378"
 }

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { sha256 } from "../contracts.mjs";
 import {
+  TS001_CANONICAL_INVARIANT_CASES,
   TS001_CONTRACT_ID,
   TS001_CONTRACT_REVISION,
   TS001_DIRECT_INVARIANTS,
@@ -63,6 +64,10 @@ export class Ts001ValidationAgent {
       }
     }
 
+    if (!evidencePointer || typeof evidencePointer !== "string" || !evidencePointer.trim()) {
+      throw new Ts001ValidationError("EVIDENCE_POINTER_REQUIRED", `case ${caseId} requires a non-empty evidencePointer (§9.2)`);
+    }
+
     const completedAt = new Date().toISOString();
     return {
       case_id: caseId,
@@ -111,6 +116,25 @@ export class Ts001ValidationAgent {
       throw new Ts001ValidationError("MANIFEST_INVALID", `canonical manifest must contain exactly 31 cases, got: ${expectedManifest.length}`);
     }
 
+    // P2: Verify canonical manifest trust anchor / digest
+    if (canonicalManifest.contract_id !== TS001_CONTRACT_ID || canonicalManifest.revision !== TS001_CONTRACT_REVISION) {
+      throw new Ts001ValidationError("MANIFEST_CONTRACT_MISMATCH", `manifest contract/revision mismatch: ${canonicalManifest.contract_id}@${canonicalManifest.revision}`);
+    }
+    if (canonicalManifest.manifest_digest) {
+      const computedManifestDigest = sha256({
+        contract_id: canonicalManifest.contract_id,
+        revision: canonicalManifest.revision,
+        authority_contract_sha256: canonicalManifest.authority_contract_sha256,
+        prd_sha256: canonicalManifest.prd_sha256,
+        technical_design_sha256: canonicalManifest.technical_design_sha256,
+        cases_count: canonicalManifest.cases_count,
+        cases_manifest: canonicalManifest.cases_manifest,
+      });
+      if (canonicalManifest.manifest_digest !== computedManifestDigest) {
+        throw new Ts001ValidationError("MANIFEST_DIGEST_MISMATCH", "canonicalManifest digest verification failed");
+      }
+    }
+
     if (!candidateRef || !candidateRef.id || !candidateRef.revision || !candidateRef.sha256) {
       throw new Ts001ValidationError("CANDIDATE_REF_REQUIRED", "candidate_ref with id, revision, and sha256 is required");
     }
@@ -146,6 +170,38 @@ export class Ts001ValidationAgent {
       }
     }
 
+    // P1-TS001-7: Invariant labels must strictly match canonical assigned cases
+    const canonicalCasesForInv = new Map();
+    for (const [inv, caseIds] of Object.entries(TS001_CANONICAL_INVARIANT_CASES)) {
+      for (const c of caseIds) {
+        if (!canonicalCasesForInv.has(c)) canonicalCasesForInv.set(c, new Set());
+        canonicalCasesForInv.get(c).add(inv);
+      }
+    }
+
+    for (const [inv, expectedCases] of Object.entries(TS001_CANONICAL_INVARIANT_CASES)) {
+      for (const caseId of expectedCases) {
+        const executed = executedMap.get(caseId);
+        if (!executed || !executed.invariants_covered || !executed.invariants_covered.includes(inv)) {
+          polarityMismatches.push({ caseId, missingInvariant: inv });
+        }
+      }
+    }
+
+    for (const c of executedCases) {
+      for (const inv of c.invariants_covered || []) {
+        if (!canonicalCasesForInv.get(c.case_id)?.has(inv)) {
+          polarityMismatches.push({ caseId: c.case_id, unassignedInvariant: inv });
+        }
+      }
+    }
+
+    // P1-TS001-5: 100% of executed cases must carry non-empty evidence_pointer
+    const missingEvidencePointers = executedCases.filter((c) => !c.evidence_pointer || !c.evidence_pointer.trim());
+    if (missingEvidencePointers.length > 0) {
+      polarityMismatches.push({ missingEvidencePointers: missingEvidencePointers.map((c) => c.case_id) });
+    }
+
     const anyFailed = executedCases.some((c) => c.status === "FAILED");
     const allInvariantsCovered = new Set(executedCases.flatMap((c) => c.invariants_covered || []));
     const missingDirectInvariants = TS001_DIRECT_INVARIANTS.filter((inv) => !allInvariantsCovered.has(inv));
@@ -170,9 +226,9 @@ export class Ts001ValidationAgent {
       output_sha256: c.output_sha256,
       exit_code: c.exit_code,
       invariants_covered: c.invariants_covered || [],
+      evidence_pointer: c.evidence_pointer,
       started_at: c.started_at,
       completed_at: c.completed_at,
-      ...(c.evidence_pointer ? { evidence_pointer: c.evidence_pointer } : {}),
     }));
 
     return {

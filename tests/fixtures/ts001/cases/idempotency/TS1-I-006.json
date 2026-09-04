@@ -1,0 +1,8 @@
+{
+  "stimulus": "three_layer_hash",
+  "layers": [
+    "worker_reported",
+    "coordinator_pre_harness",
+    "harness_authoritative"
+  ]
+}
