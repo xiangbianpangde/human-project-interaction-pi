@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:experiment-spec:v1",
+  "title": "HPI Acceptance Wire v1 ExperimentSpec",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "experiment_id",
+    "version",
+    "status",
+    "title",
+    "description",
+    "protocol_ref",
+    "parameters",
+    "acceptance_criteria",
+    "created_by",
+    "created_at"
+  ],
+  "properties": {
+    "schema": {
+      "const": "hpi/wire/experiment-spec/v1"
+    },
+    "experiment_id": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+    },
+    "version": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "frozen",
+        "superseded"
+      ]
+    },
+    "title": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+    },
+    "description": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+    },
+    "protocol_ref": {
+      "$ref": "urn:hpi:wire:execution-common:v2#/$defs/frozen_ref"
+    },
+    "parameters": {
+      "type": "object"
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+      },
+      "minItems": 1
+    },
+    "created_by": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+    },
+    "supersedes": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

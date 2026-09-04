@@ -1,0 +1,35 @@
+{
+  "schema_set": "hpi/wire/acceptance/v1",
+  "naming": "snake_case",
+  "compatibility": {
+    "external_keys": "snake_case_only",
+    "internal_keys": "camelCase",
+    "mixed_keys": "rejected",
+    "inbound_runtime": "validation_acceptance_only"
+  },
+  "dependencies": [
+    {
+      "schema_set": "hpi/wire/v1",
+      "schema_set_digest": "1d08d1acdda0cf05b29aae46949c900e49349eb21225d75698c6a44c34264725"
+    },
+    {
+      "schema_set": "hpi/wire/execution/v2",
+      "schema_set_digest": "bccb373985dacfdff8eaa1c2f7001cb4644a1d4c931e5359ce4200f69836439c"
+    }
+  ],
+  "schemas": [
+    {
+      "name": "experiment_spec",
+      "id": "urn:hpi:wire:experiment-spec:v1",
+      "path": "experiment-spec.v1.schema.json",
+      "sha256": "5319f5b32134504fb5a604f658e155369a97d3687fc43790a9eb6a36e1a32fb3"
+    },
+    {
+      "name": "validation_result",
+      "id": "urn:hpi:wire:validation-result:v1",
+      "path": "validation-result.v1.schema.json",
+      "sha256": "0055a0cc737b202a47b1781076407f0c6952bc7d55696ebfb3326b38593794ee"
+    }
+  ],
+  "schema_set_digest": "d8a3456fc55c16c873c31ab7e96e6b67add089fe78c6fa04cc9f5567dc72c7aa"
+}

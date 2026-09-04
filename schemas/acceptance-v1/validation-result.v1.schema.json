@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:hpi:wire:validation-result:v1",
+  "title": "HPI Acceptance Wire v1 ValidationResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "validation_id",
+    "task_ref",
+    "candidate_ref",
+    "contract_ref",
+    "verdict",
+    "executed_cases",
+    "summary",
+    "limitations",
+    "validator",
+    "created_at"
+  ],
+  "properties": {
+    "schema": {
+      "const": "hpi/wire/validation-result/v1"
+    },
+    "validation_id": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+    },
+    "task_ref": {
+      "$ref": "urn:hpi:wire:execution-common:v2#/$defs/frozen_ref"
+    },
+    "candidate_ref": {
+      "$ref": "urn:hpi:wire:execution-common:v2#/$defs/frozen_ref"
+    },
+    "contract_ref": {
+      "$ref": "urn:hpi:wire:execution-common:v2#/$defs/frozen_ref"
+    },
+    "verdict": {
+      "enum": [
+        "CONFORMANT",
+        "NON-CONFORMANT",
+        "INCOMPLETE"
+      ]
+    },
+    "executed_cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "case_id",
+          "status",
+          "command",
+          "environment",
+          "input_ref",
+          "output_sha256",
+          "exit_code",
+          "invariants_covered"
+        ],
+        "properties": {
+          "case_id": {
+            "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+          },
+          "status": {
+            "enum": [
+              "PASSED",
+              "REJECTED",
+              "FAILED"
+            ]
+          },
+          "command": {
+            "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+          },
+          "environment": {
+            "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+          },
+          "input_ref": {
+            "$ref": "urn:hpi:wire:execution-common:v2#/$defs/frozen_ref"
+          },
+          "output_sha256": {
+            "$ref": "urn:hpi:wire:common:v1#/$defs/sha256"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "invariants_covered": {
+            "type": "array",
+            "items": {
+              "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+      }
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent_id",
+        "role"
+      ],
+      "properties": {
+        "agent_id": {
+          "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+        },
+        "role": {
+          "const": "VALIDATION"
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
