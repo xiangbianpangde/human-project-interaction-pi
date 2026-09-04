@@ -96,7 +96,7 @@ function assertPrivateDirectory(stats, label) {
   }
 }
 
-function assertPrivateFileStats(stats, label) {
+function assertPrivateFileStats(stats, label, { expectedLinks = 1 } = {}) {
   if (!stats.isFile() || stats.isSymbolicLink()) {
     fail("UNSAFE_STORE_ENTRY", `${label} must be a non-symlink regular file`);
   }
@@ -109,8 +109,8 @@ function assertPrivateFileStats(stats, label) {
     if (typeof process.getuid === "function" && Number(stats.uid) !== process.getuid()) {
       fail("STORE_FILE_OWNER", `${label} must be owned by the runtime user`);
     }
-    if (stats.nlink !== 1n) {
-      fail("STORE_FILE_LINK_COUNT", `${label} must have exactly one hard link`, {
+    if (stats.nlink !== BigInt(expectedLinks)) {
+      fail("STORE_FILE_LINK_COUNT", `${label} must have exactly ${expectedLinks} hard link(s)`, {
         nlink: String(stats.nlink),
       });
     }
@@ -182,18 +182,25 @@ function syncCwd() {
   }
 }
 
-function readSafeRelativeFile(name) {
+function readSafeRelativeFile(name, { expectedIdentity, expectedLinks = 1 } = {}) {
   safeSegment(name, "targetName");
   const inspected = lstatSync(name, { bigint: true });
-  assertPrivateFileStats(inspected, name);
+  assertPrivateFileStats(inspected, name, { expectedLinks });
   const descriptor = openSync(name, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
     const opened = fstatSync(descriptor, { bigint: true });
-    assertPrivateFileStats(opened, name);
-    if (!sameIdentity(identity(inspected), identity(opened))) {
+    assertPrivateFileStats(opened, name, { expectedLinks });
+    const openedIdentity = identity(opened);
+    if (!sameIdentity(identity(inspected), openedIdentity)) {
       fail("STORE_FILE_IDENTITY", `${name} changed between inspection and open`);
     }
-    return readFileSync(descriptor);
+    if (expectedIdentity && !sameIdentity(expectedIdentity, openedIdentity)) {
+      fail("STORE_FILE_IDENTITY", `${name} is not the runtime-created filesystem object`, {
+        expected: expectedIdentity,
+        actual: openedIdentity,
+      });
+    }
+    return { bytes: readFileSync(descriptor), identity: openedIdentity, stats: opened };
   } finally {
     closeSync(descriptor);
   }
@@ -206,7 +213,7 @@ function testOnlyHook(request, point, tempName) {
     fail("STORE_TEST_HOOK_DISABLED", "store race hooks are disabled outside tests");
   }
   if (hook.kind === "INSERT_TARGET") {
-    const bytes = Buffer.from(hook.bytesBase64, "base64");
+    const bytes = decodeBytes(hook.bytesBase64, "test hook entry");
     const descriptor = openSync(
       request.targetName,
       constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0),
@@ -219,6 +226,46 @@ function testOnlyHook(request, point, tempName) {
     } finally {
       closeSync(descriptor);
     }
+    return;
+  }
+  if (hook.kind === "REPLACE_LINKED_TARGET") {
+    if (point !== "AFTER_LINK" || !tempName) {
+      fail("STORE_TEST_HOOK", "REPLACE_LINKED_TARGET requires AFTER_LINK");
+    }
+    const replacement = `.${request.targetName}.${randomUUID()}.replacement.tmp`;
+    const sourceBytes = readFileSync(tempName);
+    unlinkSync(request.targetName);
+    const descriptor = openSync(
+      replacement,
+      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0),
+      0o600,
+    );
+    try {
+      if (process.platform !== "win32") fchmodSync(descriptor, 0o600);
+      writeFileSync(descriptor, sourceBytes);
+      fsyncSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
+    linkSync(replacement, request.targetName);
+    return;
+  }
+  if (hook.kind === "MOVE_ANCHORED_DIRECTORY_OUTSIDE") {
+    const outside = hook.outsidePath;
+    const outsideStats = lstatSync(outside, { bigint: true });
+    if (!outsideStats.isDirectory() || outsideStats.isSymbolicLink()) {
+      fail("STORE_TEST_HOOK_OUTSIDE", "outsidePath must be a non-symlink directory");
+    }
+    const current = canonicalReal(".");
+    const moved = join(outside, `anchored-${randomUUID()}`);
+    try {
+      renameSync(current, moved);
+    } catch (error) {
+      fail("STORE_DIRECTORY_SWAP_BLOCKED", "the platform blocked anchored-directory relocation", {
+        causeCode: error?.code,
+      });
+    }
+    mkdirSync(current, { mode: 0o700 });
     return;
   }
   if (hook.kind === "SWAP_ANCHORED_DIRECTORY") {
@@ -242,11 +289,34 @@ function testOnlyHook(request, point, tempName) {
   fail("STORE_TEST_HOOK", `unknown test hook ${String(hook.kind)}`, { tempName });
 }
 
-function publishRelative(request, bytes) {
+function unlinkOwnedRelativeName(name, expectedIdentity) {
+  let inspected;
+  try {
+    inspected = lstatSync(name, { bigint: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return false;
+    throw error;
+  }
+  if (
+    !inspected.isFile() ||
+    inspected.isSymbolicLink() ||
+    !sameIdentity(identity(inspected), expectedIdentity)
+  ) {
+    fail("STORE_TEMP_IDENTITY", `${name} is no longer the runtime-created temporary file`);
+  }
+  unlinkSync(name);
+  return true;
+}
+
+function publishRelative(request, bytes, assertAuthority = () => {}) {
   const target = safeSegment(request.targetName, "targetName");
   const temp = `.${target}.${randomUUID()}.tmp`;
   let descriptor;
+  let tempIdentity;
+  let cleanupPermitted = false;
   try {
+    assertAuthority();
+    testOnlyHook(request, "AFTER_AUTHORITY_PRECHECK", temp);
     descriptor = openSync(
       temp,
       constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | (constants.O_NOFOLLOW ?? 0),
@@ -255,9 +325,12 @@ function publishRelative(request, bytes) {
     if (process.platform !== "win32") fchmodSync(descriptor, 0o600);
     writeFileSync(descriptor, bytes);
     fsyncSync(descriptor);
-    closeSync(descriptor);
-    descriptor = undefined;
+    const written = fstatSync(descriptor, { bigint: true });
+    assertPrivateFileStats(written, temp);
+    tempIdentity = identity(written);
+    cleanupPermitted = true;
 
+    assertAuthority();
     testOnlyHook(request, "BEFORE_LINK", temp);
     try {
       linkSync(temp, target);
@@ -268,19 +341,53 @@ function publishRelative(request, bytes) {
         });
       }
       const existing = readSafeRelativeFile(target);
-      if (!existing.equals(bytes)) {
+      if (!existing.bytes.equals(bytes)) {
         fail("IMMUTABLE_FILE_CONFLICT", `existing immutable file differs: ${target}`);
       }
+      assertAuthority();
+      unlinkOwnedRelativeName(temp, tempIdentity);
+      cleanupPermitted = false;
+      syncCwd();
       return { replay: true };
     }
-    unlinkSync(temp);
+
+    testOnlyHook(request, "AFTER_LINK", temp);
+    assertAuthority();
+    const linked = readSafeRelativeFile(target, {
+      expectedIdentity: tempIdentity,
+      expectedLinks: 2,
+    });
+    if (!linked.bytes.equals(bytes)) {
+      fail("STORE_POST_PUBLISH_MISMATCH", `${target} differs immediately after publication`);
+    }
+
+    unlinkOwnedRelativeName(temp, tempIdentity);
+    cleanupPermitted = false;
     syncCwd();
-    const persisted = readSafeRelativeFile(target);
-    if (!persisted.equals(bytes)) fail("STORE_POST_PUBLISH_MISMATCH", `${target} differs after publication`);
+    const stillOpen = fstatSync(descriptor, { bigint: true });
+    assertPrivateFileStats(stillOpen, target);
+    if (!sameIdentity(identity(stillOpen), tempIdentity)) {
+      fail("STORE_FILE_IDENTITY", "published object identity changed while its temp descriptor remained open");
+    }
+    assertAuthority();
+    const persisted = readSafeRelativeFile(target, { expectedIdentity: tempIdentity });
+    if (!persisted.bytes.equals(bytes)) {
+      fail("STORE_POST_PUBLISH_MISMATCH", `${target} differs after durable publication`);
+    }
+    assertAuthority();
     return { replay: false };
+  } catch (error) {
+    if (cleanupPermitted && tempIdentity) {
+      try {
+        assertAuthority();
+        if (unlinkOwnedRelativeName(temp, tempIdentity)) syncCwd();
+      } catch {
+        // Hostile namespace drift leaves visible residue rather than deleting an unbound entry.
+      }
+    }
+    throw error;
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
-    if (existsSync(temp)) unlinkSync(temp);
   }
 }
 
@@ -353,20 +460,16 @@ function acquireLock(request) {
   assertAnchoredCwd(lockIdentity, lockReal, ".lock");
   try {
     const ownerBytes = decodeBytes(request.bytesBase64, "lock owner");
-    const published = publishRelative({ ...request, targetName: "owner.json" }, ownerBytes);
+    const published = publishRelative(
+      { ...request, targetName: "owner.json" },
+      ownerBytes,
+      () => assertAnchoredCwd(lockIdentity, lockReal, ".lock"),
+    );
     if (published.replay) fail("ATTEMPT_LOCKED", `attempt ${request.attemptId} already has a lock owner`);
     assertAnchoredCwd(lockIdentity, lockReal, ".lock");
     return { replay: false };
   } catch (error) {
-    try {
-      if (existsSync("owner.json")) unlinkSync("owner.json");
-      process.chdir("..");
-      assertAnchoredCwd(anchored.expectedIdentity, anchored.expectedReal, "attempt root");
-      if (existsSync(".lock")) rmdirSync(".lock");
-      syncCwd();
-    } catch {
-      // Preserve the first fail-closed error; residual lock state is intentionally visible on recovery.
-    }
+    // Do not delete through a pathname after a failed acquire. Residue is intentional fail-closed evidence.
     throw error;
   }
 }
@@ -378,10 +481,10 @@ function releaseLock(request) {
   const lockReal = expectedRealChild(anchored.expectedReal, ".lock");
   process.chdir(".lock");
   assertAnchoredCwd(lockIdentity, lockReal, ".lock");
-  const ownerBytes = readSafeRelativeFile("owner.json");
+  const ownerEntry = readSafeRelativeFile("owner.json");
   let owner;
   try {
-    owner = JSON.parse(ownerBytes.toString("utf8"));
+    owner = JSON.parse(ownerEntry.bytes.toString("utf8"));
   } catch (error) {
     fail("UNSAFE_ATTEMPT_LOCK", "lock owner must be valid JSON", { cause: String(error) });
   }
@@ -389,10 +492,18 @@ function releaseLock(request) {
     fail("ATTEMPT_LOCK_IDENTITY", "lock token or attempt identity differs");
   }
   assertAnchoredCwd(lockIdentity, lockReal, ".lock");
-  unlinkSync("owner.json");
+  unlinkOwnedRelativeName("owner.json", ownerEntry.identity);
   syncCwd();
   process.chdir("..");
   assertAnchoredCwd(anchored.expectedIdentity, anchored.expectedReal, "attempt root");
+  const currentLock = lstatSync(".lock", { bigint: true });
+  if (
+    !currentLock.isDirectory() ||
+    currentLock.isSymbolicLink() ||
+    !sameIdentity(identity(currentLock), lockIdentity)
+  ) {
+    fail("ATTEMPT_LOCK_IDENTITY", "lock directory changed before release");
+  }
   rmdirSync(".lock");
   syncCwd();
   return { released: true };
@@ -403,7 +514,11 @@ function publish(request) {
   const anchored = anchorSegments(attemptSegments(request.attemptId, request.area), { create: true });
   testOnlyHook(request, "AFTER_ANCHOR", undefined);
   const bytes = decodeBytes(request.bytesBase64, "store entry");
-  const result = publishRelative(request, bytes);
+  const result = publishRelative(
+    request,
+    bytes,
+    () => assertAnchoredCwd(anchored.expectedIdentity, anchored.expectedReal, request.area),
+  );
   assertAnchoredCwd(anchored.expectedIdentity, anchored.expectedReal, request.area);
   return result;
 }

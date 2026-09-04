@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-import { sealRecord } from "../src/execution/contract.mjs";
+import { sha256 } from "../src/contracts.mjs";
+import { frozenIdentityKey, sealRecord } from "../src/execution/contract.mjs";
 import {
   VALIDATION_ATTEMPT_INPUT_SCHEMA,
   VALIDATION_ATTEMPT_RECORD_SCHEMA,
@@ -16,6 +17,8 @@ import {
   VALIDATION_GATES,
   VALIDATION_RUNTIME_VERSION,
   VALIDATION_STORE_PREFIX,
+  VALIDATION_STORE_SECURITY_MODEL,
+  computeValidationInputDigest,
   sha256Bytes,
   validateValidationRecordChain,
   validationScopedPath,
@@ -172,6 +175,7 @@ describe("validation-runtime-v1 frozen schema and codecs", () => {
       const validate = createAjv().getSchema("urn:hpi:wire:validation-attempt-input:v1");
       assert.equal(validate(fixture.wire), true, JSON.stringify(validate.errors));
       const parsed = fromWireValidationAttemptInput(fixture.wire);
+      assert.equal(VALIDATION_STORE_SECURITY_MODEL, "ROOT_DERIVED_DIRECTORY_CAPABILITY_V1");
       assert.equal(parsed.internal.schema, VALIDATION_ATTEMPT_INPUT_SCHEMA);
       assert.equal(parsed.internal.inputRevision, fixture.wire.input_revision);
       assert.equal(parsed.internal.isolatedWriteRoot, ".pi/artifacts/hpi-validation/v1/VRS1-TEST-001");
@@ -197,6 +201,102 @@ describe("validation-runtime-v1 frozen schema and codecs", () => {
           },
         }),
         /retryOf.*pointer/u,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("binds the directory-capability security model into input identity", () => {
+    const root = temporaryRoot();
+    try {
+      const fixture = buildValidationAttemptFixture(root);
+      const input = fromWireValidationAttemptInput(fixture.wire).internal;
+      const legacyDigest = sha256({
+        schema: VALIDATION_ATTEMPT_INPUT_SCHEMA,
+        validationAttemptId: input.validationAttemptId,
+        attemptFamily: input.attemptFamily,
+        projectId: input.projectId,
+        adapter: input.adapter,
+        taskRef: input.taskRef,
+        contractRefs: input.contractRefs,
+        inputRefs: input.inputRefs,
+        declaredReadSet: input.declaredReadSet,
+        isolatedWriteRoot: input.isolatedWriteRoot,
+        executionContract: input.executionContract,
+        validationContract: input.validationContract,
+        authority: input.authority,
+      });
+      assert.notEqual(legacyDigest, fixture.wire.input_digest);
+      const legacyWire = structuredClone(fixture.wire);
+      legacyWire.input_digest = legacyDigest;
+      delete legacyWire.input_revision;
+      const resealed = sealRecord(legacyWire, "input_revision");
+      assert.throws(
+        () => fromWireValidationAttemptInput(resealed),
+        /inputDigest.*does not match/u,
+      );
+
+      const legacyRecord = recordDraft({
+        fixture,
+        inputRef: inputSnapshotRef(root, fixture),
+        sequence: 0,
+        phase: "DECLARED",
+      });
+      legacyRecord.runtime.runtimeVersion = "0.1.0";
+      assert.throws(
+        () => toWireValidationAttemptRecord(legacyRecord),
+        /runtimeVersion.*0\.2\.0/u,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects reordered and resealed manifest or Gate evidence arrays", () => {
+    const root = temporaryRoot();
+    try {
+      const fixture = buildValidationAttemptFixture(root);
+      const parsedInput = fromWireValidationAttemptInput(fixture.wire).internal;
+      const reorderedInput = {
+        ...parsedInput,
+        declaredReadSet: parsedInput.declaredReadSet.toReversed(),
+      };
+      const reorderedWire = structuredClone(fixture.wire);
+      reorderedWire.declared_read_set.reverse();
+      reorderedWire.input_digest = computeValidationInputDigest(reorderedInput);
+      delete reorderedWire.input_revision;
+      const resealedInput = sealRecord(reorderedWire, "input_revision");
+      assert.throws(
+        () => fromWireValidationAttemptInput(resealedInput),
+        /declaredReadSet.*canonical pointer order/u,
+      );
+
+      const inputRef = inputSnapshotRef(root, fixture);
+      const declared = fromWireValidationAttemptRecord(toWireValidationAttemptRecord(
+        recordDraft({ fixture, inputRef, sequence: 0, phase: "DECLARED" }),
+      )).internal;
+      const acceptedDraft = recordDraft({
+        fixture,
+        inputRef,
+        sequence: 1,
+        phase: "ACCEPTED",
+        previousRecordRef: refForRecord(declared),
+      });
+      acceptedDraft.gateOutcomes[1].evidenceRefs = [
+        fixture.taskRef,
+        ...fixture.contractRefs,
+        ...fixture.inputRefs,
+      ].toSorted((left, right) =>
+        frozenIdentityKey(left).localeCompare(frozenIdentityKey(right)),
+      );
+      const acceptedWire = toWireValidationAttemptRecord(acceptedDraft);
+      acceptedWire.gate_outcomes[1].evidence_refs.reverse();
+      delete acceptedWire.record_revision;
+      const resealedRecord = sealRecord(acceptedWire, "record_revision");
+      assert.throws(
+        () => fromWireValidationAttemptRecord(resealedRecord),
+        /evidenceRefs.*canonical frozen-identity order/u,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });

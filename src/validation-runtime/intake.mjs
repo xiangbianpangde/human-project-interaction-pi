@@ -15,6 +15,7 @@ import {
 import {
   VALIDATION_GATES,
   VALIDATION_STORE_PREFIX,
+  VALIDATION_STORE_SECURITY_MODEL,
   sha256Bytes,
   validationRetryAttemptId,
   validationScopedPath,
@@ -160,6 +161,14 @@ function validateIdentity(projectRoot, intake) {
   }
   if (input.taskRef.pointer !== TS001_FILES.contract) {
     fail("IDENTITY_TASK_REF", `task_ref must point to ${TS001_FILES.contract}`);
+  }
+  const contractPointers = input.contractRefs.map((ref) => ref.pointer);
+  if (JSON.stringify(contractPointers) !== JSON.stringify([TS001_FILES.prd])) {
+    fail("IDENTITY_CONTRACT_REFS", `contract_refs must contain only ${TS001_FILES.prd}`);
+  }
+  const inputPointers = input.inputRefs.map((ref) => ref.pointer);
+  if (JSON.stringify(inputPointers) !== JSON.stringify([TS001_FILES.technicalDesign])) {
+    fail("IDENTITY_INPUT_REFS", `input_refs must contain only ${TS001_FILES.technicalDesign}`);
   }
   const base = loadTs001Pilot(projectRoot);
   const expectedByPointer = new Map(base.sourceSnapshot.map((ref) => [ref.pointer, ref]));
@@ -358,6 +367,7 @@ export function previewValidationAttempt(projectRoot, manifestPointer) {
     attemptId: intake.input.validationAttemptId,
     inputRevision: intake.input.inputRevision,
     inputDigest: intake.input.inputDigest,
+    storeSecurityModel: VALIDATION_STORE_SECURITY_MODEL,
     ...evaluateValidationAttemptGates(projectRoot, intake),
     wroteStore: false,
     projectCanonicalChanged: false,

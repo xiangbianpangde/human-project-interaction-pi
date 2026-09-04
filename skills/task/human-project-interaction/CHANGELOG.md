@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1 - Unreleased
+
+- Bind Validation Runtime Slice V1 input identity to `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1` and distinguish capability confinement from continuous pathname containment against hostile same-UID namespace mutation.
+- Require persisted input, Gate, and MachineResult evidence arrays to retain canonical wire order instead of normalizing reordered and resealed ledgers.
+- Require descriptor-bound type, mode, owner, and link-count policy on validation-store reopen; retain formal TS-001 `NOT-RUN` and all machine-only authority limits.
+
 ## 0.6.0 - 2026-08-31
 
 - Expose the validation-runtime-v1 lineage and its machine-only authority boundary during project re-entry.

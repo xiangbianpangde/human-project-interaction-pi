@@ -227,16 +227,6 @@ function gateFactStatus(status) {
   return "NOT_RUN";
 }
 
-function normalizedMachineResultForComparison(machineResult) {
-  return {
-    ...machineResult,
-    facts: machineResult.facts.map((fact) => ({
-      ...fact,
-      evidenceRefs: sortedRefs(fact.evidenceRefs),
-    })),
-  };
-}
-
 export function buildCanonicalValidationMachineResult(input, runningRecordRef, gateOutcomes) {
   const allPassed = gateOutcomes.every((outcome) => outcome.status === "PASSED");
   const facts = gateOutcomes.map((outcome) => ({
@@ -274,8 +264,8 @@ export function buildCanonicalValidationMachineResult(input, runningRecordRef, g
 export function assertCanonicalValidationMachineResult(machineResult, input, runningRecordRef, gateOutcomes) {
   const expected = buildCanonicalValidationMachineResult(input, runningRecordRef, gateOutcomes);
   assertExact(
-    normalizedMachineResultForComparison(machineResult),
-    normalizedMachineResultForComparison(expected),
+    machineResult,
+    expected,
     "MACHINE_RESULT_SEMANTICS",
     "stored MachineResult differs from the canonical V1 Gate/fact derivation",
   );

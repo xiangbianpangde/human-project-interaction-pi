@@ -197,6 +197,30 @@ describe("isolated validation attempt store", () => {
     }
   });
 
+  it("rejects a reordered and resealed MachineResult evidence array", () => {
+    const root = temporaryRoot();
+    try {
+      const state = startAttempt(root, "VRS1-STORE-REORDERED-RESULT");
+      appendRecord(root, state, "ACCEPTED");
+      appendRecord(root, state, "RUNNING");
+      const reordered = buildCanonicalValidationMachineResult(
+        state.input,
+        state.previousRef,
+        canonicalSuccessfulValidationGateOutcomes(state.input, state.inputRef),
+      );
+      reordered.facts[1].evidenceRefs.reverse();
+      const snapshot = publishValidationMachineResult(root, state.attemptId, reordered);
+      appendRecord(root, state, "TERMINAL", "MACHINE_RESULT_PRODUCED", snapshot.ref);
+      state.lock.release();
+      assert.throws(
+        () => readValidationAttemptHistory(root, state.attemptId),
+        /MACHINE_RESULT_SEMANTICS/u,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects all-PASSED records with non-canonical Gate codes or evidence", () => {
     for (const mutation of ["code", "evidence"]) {
       const root = temporaryRoot();
@@ -395,7 +419,7 @@ describe("isolated validation attempt store", () => {
       const attemptEntries = readdirSync(validationStoreRoot(root, state.attemptId));
       const anchored = attemptEntries.find((entry) => entry.startsWith("records.anchored-"));
       if (anchored) {
-        assert.equal(readdirSync(join(validationStoreRoot(root, state.attemptId), anchored)).length, 2);
+        assert.equal(readdirSync(join(validationStoreRoot(root, state.attemptId), anchored)).length, 1);
       } else {
         assert.ok(attemptEntries.includes("records"), JSON.stringify(attemptEntries));
       }
@@ -403,6 +427,65 @@ describe("isolated validation attempt store", () => {
       lock?.release();
       rmSync(root, { recursive: true, force: true });
       rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("treats relocation of an acquired directory capability as detected external mutation", {
+    skip: process.platform === "win32" ? "Windows may deny rename of the worker cwd" : false,
+  }, () => {
+    const root = temporaryRoot();
+    const outside = temporaryRoot();
+    let lock;
+    try {
+      const state = startAttempt(root, "VRS1-STORE-CAPABILITY-RELOCATION");
+      lock = state.lock;
+      assert.throws(
+        () => appendRecord(root, state, "ACCEPTED", "NONE", undefined, {
+          testOnlyWorkerHook: {
+            point: "AFTER_LINK",
+            kind: "MOVE_ANCHORED_DIRECTORY_OUTSIDE",
+            outsidePath: outside,
+          },
+        }),
+        /STORE_DIRECTORY_REALPATH/u,
+      );
+      assert.deepEqual(
+        readdirSync(join(validationStoreRoot(root, state.attemptId), "records")),
+        [],
+      );
+      const moved = readdirSync(outside);
+      assert.equal(moved.length, 1, JSON.stringify(moved));
+      const acquiredEntries = readdirSync(join(outside, moved[0]));
+      assert.equal(acquiredEntries.filter((entry) => entry.endsWith(".json")).length, 2);
+      assert.equal(acquiredEntries.some((entry) => entry.endsWith(".tmp")), true);
+    } finally {
+      lock?.release();
+      rmSync(root, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it("binds the published target to the still-open runtime-created temp descriptor", () => {
+    const root = temporaryRoot();
+    let lock;
+    try {
+      const state = startAttempt(root, "VRS1-STORE-PUBLICATION-IDENTITY");
+      lock = state.lock;
+      assert.throws(
+        () => appendRecord(root, state, "ACCEPTED", "NONE", undefined, {
+          testOnlyWorkerHook: {
+            point: "AFTER_LINK",
+            kind: "REPLACE_LINKED_TARGET",
+          },
+        }),
+        /STORE_FILE_IDENTITY/u,
+      );
+      const records = readdirSync(join(validationStoreRoot(root, state.attemptId), "records"));
+      assert.equal(records.some((entry) => entry.endsWith(".replacement.tmp")), true);
+      assert.equal(records.some((entry) => entry.startsWith("000001-")), true);
+    } finally {
+      lock?.release();
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

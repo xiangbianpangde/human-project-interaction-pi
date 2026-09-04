@@ -97,8 +97,10 @@ manifest 只能声明：
 .pi/artifacts/hpi-validation/v1/<validation_attempt_id>/
 ```
 
-- 写 worker 在独立子进程内从 project root 开始，使用 device/inode + realpath 逐段 `chdir` 锚定每一级非 symlink 目录，避免检查后的 parent substitution 被后续 open 跟随；
-- final temp/target 使用 no-follow，目录 mode 0700、文件 mode 0600；POSIX reopen 同时验证 owner 与单 hard-link；
+- security model 固定为 `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1`：write worker 只能从经验证的 project-root object 开始，以 relative traversal 和 device/inode + realpath 逐段获得非 symlink area directory capability；
+- capability 获得后，全部 create/read/link/unlink/fsync 必须相对该 cwd object，不能重建 absolute/project pathname，也不能跟随随后放到旧 pathname 的 replacement；
+- 该模型不声称 hostile same-UID 外部进程无法在 capability 获得后搬移同一 inode。此类 relocation/content mutation 属于外部 namespace mutation；检测到时 fail closed，后续 reopen 不得自动信任；`.lock` 只串行化 cooperating runtime，不是 same-UID security barrier；
+- final temp/target 使用 no-follow，目录 mode 0700、文件 mode 0600；POSIX reopen 在实际读取 descriptor 上同时验证 owner 与单 hard-link；
 - Windows 不声明 POSIX mode/link-count 语义，但 hard-link no-replace 不可用时必须 fail closed；
 - 不允许调用方扩大写根；
 - 不写 source、schema、fixture、README、canonical、worklog 或 Pi session 文件；
@@ -151,7 +153,7 @@ JSON Schema 只负责可表达的结构；完整 identity、digest、ref resolut
 | `retry_of` | 可选，必须精确指向旧 attempt 最新 record |
 | `declared_at` | 严格 RFC3339 timestamp |
 
-`input_digest` 不包含 `declared_at`、`input_revision` 或 `retry_of`；它绑定项目、Adapter、Task、contract/input refs、read set、write root、contract sets 与 authority profile。
+`input_digest` 不包含 `declared_at`、`input_revision` 或 `retry_of`；它绑定项目、Adapter、Task、contract/input refs、read set、write root、contract sets、authority profile 与固定的 `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1` security-model discriminator。runtime `0.2.0` 使旧模型记录 fail closed；冻结 wire shape/bytes 不变。
 
 `input_revision` 绑定除自身外的完整 manifest。
 
@@ -221,10 +223,11 @@ DECLARED → ACCEPTED → RUNNING → TERMINAL
     owner.json
 ```
 
-- temp 文件在已锚定 cwd 中以 exclusive/no-follow create 写入并 fsync，再通过 `link(temp, target)` 原子发布；该 hard-link 操作提供 no-replace，绝不 rename-overwrite 并发出现的 target；
-- 发布后删除 temp 并 fsync 目录；link→unlink 间 crash 留下的 temp 作为可见 incomplete evidence fail closed，不自动清理；
-- 目标文件存在时必须是 private、regular、non-symlink、bounded 且 byte-equivalent，才允许 replay；
-- attempt lock 使用锚定 cwd 中的 atomic directory create 和 token-bound owner；正常退出只释放同 token lock，异常残留不自动夺锁；
+- temp 文件在已获得的 cwd capability 中以 exclusive/no-follow create；descriptor 保持打开，写入并 fsync 后才通过 `link(temp, target)` 原子发布；该 hard-link 操作提供 no-replace，绝不 rename-overwrite 并发出现的 target；
+- link 后以 no-follow descriptor 证明 target 与仍打开的 temp descriptor 具有相同 device/inode 和 bytes；删除 temp name、fsync 目录后再次验证同一 object、private policy 与 POSIX `nlink==1` 才能报告成功；
+- relocation/target identity drift 时 cleanup 不能作为 confinement 证明；不能安全归属的 residue 必须保留并使 recovery fail closed；
+- 目标文件存在时必须在实际打开 descriptor 上证明 private、regular、non-symlink、bounded、单-link（POSIX）且 byte-equivalent，才允许 replay；
+- attempt lock 使用 capability-relative atomic directory create 和 token-bound owner；正常退出只释放同 token lock，异常残留不自动夺锁；它不是 hostile same-UID actor 的权限边界；
 - 残留 lock、temp 文件、sequence 缺口、chain mismatch、未知文件或 revision mismatch 均 fail closed；
 - crash 后以新 attempt retry，不实现 stale-lock reclaim 或通用 Reconciler。
 
@@ -237,7 +240,7 @@ Store 只对自身 attempt history 有权威。删除整个 store 必须只影�
 | `V1_SCHEMA` | manifest/record 严格结构与 closed keys | 完整 Harness G-SCHEMA |
 | `V1_IDENTITY` | attempt、Task、ref、schema-set identity | Agent 身份/角色分离已完成 |
 | `V1_REFERENCE` | 显式 pointer 存在、regular、hash 匹配 | 通用 reference/evidence runtime |
-| `V1_WORKSPACE` | read set 闭合、write root 固定、network DENY | 完整 filesystem sandbox/G-PERMISSION |
+| `V1_WORKSPACE` | read set 闭合、write root identity 固定、root-derived directory capability、network DENY | 不提供 hostile same-UID mutation 下的 continuous pathname containment，亦非完整 filesystem sandbox/G-PERMISSION |
 | `V1_AUTHORITY` | 禁止 canonical/HumanResult/CandidateEvent/dispatch | 已实现 canonical transaction |
 
 任何失败产生 BLOCKED/INCOMPLETE 机器结果或无写入拒绝，不产生 Human Escalation。
@@ -253,12 +256,12 @@ Store 只对自身 attempt history 有权威。删除整个 store 必须只影�
 
 受限投影：
 
-- 使用独立 Adapter label `ts001-validation-runtime/0.1.0`；
+- 使用独立 Adapter label `ts001-validation-runtime/0.2.0`；
 - source snapshot 包含 base read-only sources、attempt records 与 MachineResult snapshot；
 - primary task 是 validation-only task，`humanStatus=NOT_NEEDED`；
 - project/milestone authority 仍保持 `INCOMPLETE`，不得把 TS-001 `test_status` 改出 `NOT-RUN`；
 - 可更新的只有 validation attempt status、machine evidence summary、limitations、unresolved 和 latest machine change；
-- persisted success 必须重新导出为共享 canonical semantics：Gate success code/evidence、fact id/kind/statement/status/evidence、limitations 与 unresolved 全部精确闭合；仅结构自洽且可重算 revision 的 ledger 不足以产生 PASS；
+- persisted success 必须保留 canonical wire array order，并重新导出为共享 canonical semantics：Gate success code/evidence、fact id/kind/statement/status/evidence、limitations 与 unresolved 全部精确闭合；重新排序或仅结构自洽且可重算 revision 的 ledger 不足以产生 PASS；
 - 每次返回 current PASS 前重新执行当前五 Gate。当前 Gate 或 base source 不再匹配历史结果时，ledger 保留历史字节，runtime/status 顶层 `machineResult` 与当前投影均降为 `INCOMPLETE`；base 不可用时顶层 current result 为 `null`。`history.machineResult` / `historicalMachineResult` 只代表不可变历史，不得自动 invalidation、改写历史或宣称当前 PASS；
 - 不创建 HumanResult、Pain/Design 接受或 canonical provenance。
 
@@ -292,7 +295,7 @@ Developer conformance lane 可重复运行 TS-001 风格的 schema、ref、path�
 - 自报/prose 被提升为 PASS；
 - conflict 被静默修复；
 - crash-interrupted 无法与 completed 区分；
-- store 写出隔离根；
+- runtime 自身跟随 substituted pathname、从非 project-root-derived directory capability 获得写权，或把 hostile namespace drift 伪装成成功；
 - 实现需要通用 Reconciler、Agent dispatch 或 canonical transaction 才能继续；
 - 既有 frozen schema bytes 需要原地修改。
 
@@ -301,8 +304,10 @@ Developer conformance lane 可重复运行 TS-001 风格的 schema、ref、path�
 - manifest closed schema 与 companion validator 一致；
 - 全部 ref 原始 bytes hash 匹配；
 - preview 零写入；
-- run 只写隔离 store；parent substitution race 不跟随 replacement，concurrent target 不覆盖；
-- persisted all-PASSED Gate/fact surface 与 canonical derivation 精确相等，五 Gate forged ledger 拒绝；
+- runtime/security identity 绑定 `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1`；全部 mutation 相对 root-derived capability，不跟随 replacement；outside relocation 被检测为外部 mutation且不误报成功；
+- temp descriptor 在 publication 全程保持打开，target object identity 前后闭合；concurrent target 不覆盖，不能归属的 residue 可见且 recovery fail closed；
+- persisted arrays 保持 canonical wire order；all-PASSED Gate/fact surface 与 canonical derivation 精确相等，重排/reseal 与五 Gate forged ledger 均拒绝；
+- input/record/result/lock-owner 的 private policy 在实际读取 descriptor 上复验；
 - exact replay 不追加；
 - divergent attempt conflict；
 - retry 新 attempt；
@@ -314,7 +319,7 @@ Developer conformance lane 可重复运行 TS-001 风格的 schema、ref、path�
 - formal TS-001 保持 NOT-RUN；
 - Extension 在 unsupported/untrusted project fail closed；
 - `/reload` stale identity 零写入；
-- Windows/Linux contract、store 与 runtime 验证通过；POSIX parent-swap、mode/link-count 与 `SIGKILL` crash 语义仅在 Linux/macOS 验证，Windows 验证 hard-link no-replace 与 fail-closed behavior。
+- Windows/Linux contract、store 与 runtime 验证通过；Linux/macOS 验证 parent replacement、outside relocation、publication identity、mode/link-count 与 crash residue；Windows 验证 junction/reparse replacement、hard-link no-replace 或明确 fail-closed，且不宣称 POSIX mode/link-count。
 
 ## 16. 明确后置
 

@@ -131,7 +131,7 @@ export function inspectAuthoritativeFiles(projectRoot, files, { maxBytes = DEFAU
   };
 }
 
-function readBoundedRegularFileBytes(root, rootReal, pointer, maxBytes) {
+function readBoundedRegularFileBytes(root, rootReal, pointer, maxBytes, validateOpenedFile) {
   const inspected = inspectOne(root, rootReal, pointer, maxBytes);
   if (inspected.missing) throw new AuthoritativeFileError(`authority file is missing: ${pointer}`);
   const noFollow = constants.O_NOFOLLOW ?? 0;
@@ -144,6 +144,9 @@ function readBoundedRegularFileBytes(root, rootReal, pointer, maxBytes) {
     }
     if (stats.size > maxBytes) {
       throw new AuthoritativeFileError(`authority file exceeds ${maxBytes} bytes: ${pointer}`);
+    }
+    if (validateOpenedFile !== undefined) {
+      validateOpenedFile(stats, { pointer, path: inspected.path });
     }
     const chunks = [];
     let total = 0;
@@ -175,11 +178,21 @@ function inspectReadableSet(projectRoot, files, options) {
 }
 
 export function readAuthoritativeFileBuffers(projectRoot, files, options = {}) {
+  const { validateOpenedFile } = options;
+  if (validateOpenedFile !== undefined && typeof validateOpenedFile !== "function") {
+    throw new AuthoritativeFileError("validateOpenedFile must be a function when provided");
+  }
   const inspected = inspectReadableSet(projectRoot, files, options);
   return Object.fromEntries(
     Object.entries(files).map(([key, pointer]) => [
       key,
-      readBoundedRegularFileBytes(inspected.root, inspected.rootReal, pointer, inspected.maxBytes),
+      readBoundedRegularFileBytes(
+        inspected.root,
+        inspected.rootReal,
+        pointer,
+        inspected.maxBytes,
+        validateOpenedFile,
+      ),
     ]),
   );
 }

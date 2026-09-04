@@ -38,7 +38,7 @@ describe("implementation documentation", () => {
   });
 
   it("tracks package, Skill, independently versioned style, and execution lineage releases", () => {
-    assert.equal(packageJson.version, "0.6.0");
+    assert.equal(packageJson.version, "0.6.1");
     assert.equal(manifest.version, "0.2.0");
     assert.equal(executionV1Manifest.schema_set, "hpi/wire/execution/v1");
     assert.equal(executionV1Manifest.schema_set_digest, "450698c6e3218b3419f081dc47576f94edaea36ee0da6a97b35c80ef6d9e88d1");
@@ -54,8 +54,8 @@ describe("implementation documentation", () => {
       validationManifest.dependencies.map((dependency) => dependency.schema_set),
       ["hpi/wire/v1", "hpi/wire/execution/v2"],
     );
-    assert.match(skill, /version: "0\.6\.0"/u);
-    assert.match(changelog, /^## 0\.6\.0 - 2026-08-31$/mu);
+    assert.match(skill, /version: "0\.6\.1"/u);
+    assert.match(changelog, /^## 0\.6\.1 - Unreleased$/mu);
   });
 
   it("aligns the Node floor and cross-platform checkout with the pinned Pi runtime", () => {

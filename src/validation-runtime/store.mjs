@@ -1,7 +1,6 @@
 import {
   existsSync,
   lstatSync,
-  readFileSync,
   readdirSync,
   realpathSync,
 } from "node:fs";
@@ -358,6 +357,22 @@ function assertPrivateStoredFile(stats, label) {
   }
 }
 
+function readPrivateValidationStoreBuffers(projectRoot, files) {
+  try {
+    return readAuthoritativeFileBuffers(projectRoot, files, {
+      maxBytes: MAX_STORE_FILE_BYTES,
+      validateOpenedFile(stats, context) {
+        assertPrivateStoredFile(stats, `opened store entry ${context.pointer}`);
+      },
+    });
+  } catch (error) {
+    if (error instanceof ValidationRuntimeStoreError) throw error;
+    fail("STORE_ENTRY_READ", "validation store entry changed or became unsafe while opening", {
+      cause: error,
+    });
+  }
+}
+
 function safeStoredFiles(projectRoot, directory, pattern, kind) {
   if (!existsSync(directory)) return [];
   const stats = lstatSync(directory);
@@ -546,9 +561,17 @@ export function readValidationAttemptHistory(projectRoot, attemptId) {
     }
     let owner;
     try {
-      owner = JSON.parse(readFileSync(ownerPath, "utf8"));
+      const ownerPointer = projectRelative(paths.projectRoot, ownerPath);
+      const ownerBytes = readPrivateValidationStoreBuffers(
+        projectRoot,
+        { owner: ownerPointer },
+      ).owner;
+      owner = JSON.parse(ownerBytes.toString("utf8"));
     } catch (error) {
-      fail("UNSAFE_ATTEMPT_LOCK", "attempt lock owner must be valid JSON", { cause: error });
+      if (error instanceof ValidationRuntimeStoreError) throw error;
+      fail("UNSAFE_ATTEMPT_LOCK", "attempt lock owner must be descriptor-bound private JSON", {
+        cause: error,
+      });
     }
     if (
       owner?.schema !== "hpi/validation-attempt-lock/v1" ||
@@ -576,9 +599,7 @@ export function readValidationAttemptHistory(projectRoot, attemptId) {
   const recordFiles = safeStoredFiles(projectRoot, paths.recordsDir, RECORD_FILE, "record")
     .sort((left, right) => left.name.localeCompare(right.name));
   const recordPointers = Object.fromEntries(recordFiles.map((file, index) => [`record${index}`, file.pointer]));
-  const recordBytes = readAuthoritativeFileBuffers(projectRoot, recordPointers, {
-    maxBytes: MAX_STORE_FILE_BYTES,
-  });
+  const recordBytes = readPrivateValidationStoreBuffers(projectRoot, recordPointers);
   const records = recordFiles.map((file, index) => {
     let wire;
     try {
@@ -602,9 +623,10 @@ export function readValidationAttemptHistory(projectRoot, attemptId) {
   let storedInputRef = null;
   if (inputFiles.length === 1) {
     const inputFile = inputFiles[0];
-    const bytes = readAuthoritativeFileBuffers(projectRoot, { input: inputFile.pointer }, {
-      maxBytes: MAX_STORE_FILE_BYTES,
-    }).input;
+    const bytes = readPrivateValidationStoreBuffers(
+      projectRoot,
+      { input: inputFile.pointer },
+    ).input;
     const rawDigest = sha256Bytes(bytes);
     if (rawDigest !== inputFile.match[1]) {
       fail("INPUT_SNAPSHOT_FILENAME", `${inputFile.name} differs from its raw-byte digest`);
@@ -662,9 +684,10 @@ export function readValidationAttemptHistory(projectRoot, attemptId) {
     if (terminal.machineResultRef.pointer !== match.pointer) {
       fail("MACHINE_RESULT_POINTER", "terminal machine_result_ref pointer differs from store path");
     }
-    const bytes = readAuthoritativeFileBuffers(projectRoot, { result: match.pointer }, {
-      maxBytes: MAX_STORE_FILE_BYTES,
-    }).result;
+    const bytes = readPrivateValidationStoreBuffers(
+      projectRoot,
+      { result: match.pointer },
+    ).result;
     let wire;
     try {
       wire = JSON.parse(bytes.toString("utf8"));

@@ -24,14 +24,16 @@ The schema expresses closed snake_case shape. Companion validation under `src/va
 
 - exact current schema-set identities;
 - fixed MACHINE_VALIDATION_ONLY authority;
-- complete frozen refs and pointer/read-set equality;
+- complete frozen refs, canonical array ordering, and pointer/read-set equality;
 - raw file SHA resolution inside the project root;
 - exact isolated write root;
 - immutable input/record revisions;
 - contiguous lifecycle, canonical five-Gate order, phase semantics and previous-record linkage;
 - terminal MachineResult scope/verdict plus exactly one Gate-bound fact per Gate, with success code/evidence and fact kind/statement/evidence/limitations exactly equal to the shared canonical derivation;
 - current Gate re-evaluation before a persisted historical PASS can remain current;
-- cwd-anchored store publication, atomic hard-link no-replace, and private persisted-file checks outside the frozen wire shape;
+- runtime `0.2.0` binding of `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1` into the companion `input_digest`, without changing frozen schema bytes;
+- root-derived cwd-capability publication that never follows a substituted path, atomic hard-link no-replace, temp↔target object-identity proof, and descriptor-bound private persisted-file checks outside the frozen wire shape;
+- an explicit limitation: hostile same-UID relocation of an already acquired inode is external namespace mutation, not a continuous-pathname confinement guarantee, and detection must fail closed;
 - exact replay versus divergent identity conflict;
 - interrupted-attempt and retry-as-new-attempt behavior.
 

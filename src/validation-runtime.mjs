@@ -11,6 +11,7 @@ export {
   VALIDATION_PROJECT_ID,
   VALIDATION_RUNTIME_VERSION,
   VALIDATION_STORE_PREFIX,
+  VALIDATION_STORE_SECURITY_MODEL,
   ValidationRuntimeContractError,
   computeValidationInputDigest,
   sha256Bytes,
