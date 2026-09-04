@@ -1,0 +1,105 @@
+{
+  "schema": "hpi/wire/task-slice/v2",
+  "task_id": "TS001-IMPL",
+  "project_id": "HPI-TS001-PILOT",
+  "title": "TS-001 实现任务切片",
+  "objective": "在 runtime 实现前先固定 Schema、权限/引用、幂等与回滚合同及测试基线。",
+  "pain_refs": [
+    {
+      "id": "P-HPI-002",
+      "revision": "1",
+      "sha256": "61e4c6ea9cabdd335a86a64845fa4bfa8c1b6be8b4bdbec94e667de18db9d030",
+      "pointer": "human-project-interaction-skills-prd.md"
+    }
+  ],
+  "requirement_refs": [],
+  "design_refs": [
+    {
+      "id": "D-HPI-DUAL-STATUS",
+      "revision": "1",
+      "sha256": "8b3f1ef94e062e415a18b8cbf463846984a31d3e4796858e9b420e11a9c304bf",
+      "pointer": "human-project-interaction-skills-technical-design.md"
+    }
+  ],
+  "non_goals": [
+    "不写 project canonical 状态。",
+    "不实现科学算法。"
+  ],
+  "permission_scope": {
+    "allowed_paths": [
+      "09_TS001_测试与回滚验收.md",
+      "schemas/**",
+      "src/**",
+      "tests/**"
+    ],
+    "forbidden_paths": [
+      "canonical/**"
+    ],
+    "data_classes": [
+      "INTERNAL"
+    ],
+    "network": {
+      "mode": "DENY",
+      "allowed_hosts": []
+    }
+  },
+  "input_refs": [
+    {
+      "id": "DOC-HPI-PRD",
+      "revision": "1",
+      "sha256": "b9cdff8541bc7809aad32025e3c530a48b9e774c70a0af3e6437310cfe4a6c26",
+      "pointer": "human-project-interaction-skills-prd.md"
+    },
+    {
+      "id": "DOC-HPI-TECH-DESIGN",
+      "revision": "1",
+      "sha256": "4a1e5c8720bce7cd5615f6e6de95854a7dcdddefb91915b6dd18f6667c1bfcf8",
+      "pointer": "human-project-interaction-skills-technical-design.md"
+    }
+  ],
+  "shared_contract_ref": {
+    "id": "TS1-TEST-001",
+    "revision": "1",
+    "sha256": "e0aeffc678717ba7416b5ff775683ec00919ecc9bdf6054327f6020dedfb9804",
+    "pointer": "09_TS001_测试与回滚验收.md"
+  },
+  "acceptance_ref": {
+    "id": "TS1-TEST-001",
+    "revision": "1",
+    "sha256": "e0aeffc678717ba7416b5ff775683ec00919ecc9bdf6054327f6020dedfb9804",
+    "pointer": "09_TS001_测试与回滚验收.md"
+  },
+  "failure_semantics": "测试失败保持 INCOMPLETE；不伪造 PASS。",
+  "rollback": "创建新 revision；不原地覆盖。",
+  "assigned_roles": {
+    "implementation": {
+      "agent_id": "agent-impl",
+      "role": "IMPLEMENTATION",
+      "harness_revision": "harness/pilot-v1"
+    },
+    "validation": {
+      "agent_id": "agent-ts001-validator",
+      "role": "VALIDATION",
+      "harness_revision": "harness/pilot-v1"
+    }
+  },
+  "machine_status": "NOT-RUN",
+  "human_status": "NOT_NEEDED",
+  "status_source": {
+    "id": "TS1-TEST-001",
+    "revision": "1",
+    "sha256": "e0aeffc678717ba7416b5ff775683ec00919ecc9bdf6054327f6020dedfb9804",
+    "pointer": "09_TS001_测试与回滚验收.md"
+  },
+  "changed_fields": [],
+  "provenance_refs": [
+    {
+      "id": "TS1-TEST-001",
+      "revision": "1",
+      "sha256": "e0aeffc678717ba7416b5ff775683ec00919ecc9bdf6054327f6020dedfb9804",
+      "pointer": "09_TS001_测试与回滚验收.md"
+    }
+  ],
+  "created_at": "2026-08-29T10:00:00.000Z",
+  "task_revision": "beedcb19fa802a5ebf5230b762ee3a32b734424e4e7ebebf22eb1d2529385b28"
+}

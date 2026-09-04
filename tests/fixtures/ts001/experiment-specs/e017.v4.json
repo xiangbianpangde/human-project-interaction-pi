@@ -1,0 +1,24 @@
+{
+  "schema": "hpi/wire/experiment-spec/v1",
+  "experiment_id": "E017",
+  "version": "4",
+  "status": "frozen",
+  "title": "TS-001 模拟实验规范 E017",
+  "description": "只读实验规范 fixture，用于验证 G-002 只读对象防篡改 Gate。",
+  "protocol_ref": {
+    "id": "PROTO-E017",
+    "revision": "1",
+    "sha256": "c32faaee24a85257b4ca2309a7ec346c775ed55298d6495b83543b8cd4dd8a40",
+    "pointer": "fixtures/protocol.md"
+  },
+  "parameters": {
+    "temperature": 0.7,
+    "seed_policy": "fixed"
+  },
+  "acceptance_criteria": [
+    "三臂非 arm 字段指纹一致",
+    "只读对象禁止 mutation 请求"
+  ],
+  "created_by": "text-agent",
+  "created_at": "2026-08-29T10:00:00.000Z"
+}
