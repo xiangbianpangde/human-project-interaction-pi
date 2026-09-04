@@ -9,7 +9,7 @@ import { projectSource } from "../projector.mjs";
 import { reevaluateStoredValidationAttemptGates } from "./intake.mjs";
 import { readValidationAttemptHistory } from "./store.mjs";
 
-export const VALIDATION_PROJECTION_ADAPTER = "ts001-validation-runtime/0.1.0";
+export const VALIDATION_PROJECTION_ADAPTER = "ts001-validation-runtime/0.2.0";
 
 export class ValidationRuntimeProjectionError extends Error {
   constructor(message, details = {}) {

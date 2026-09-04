@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.1 - Unreleased
+
+- Record fresh independent Sol audit `c9906f95…`: exact VRS1 tree `32ff6ec…` returned BLOCK on continuous-path wording, normalized evidence order, and non-descriptor-bound reopen policy, superseding earlier VRS1 RELEASE prose; formal TS-001 remains `NOT-RUN`.
+- Adopt `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1`, bump the local validation runtime to `0.2.0`, and bind the security-model discriminator into `input_digest` without changing any frozen wire-schema bytes. The worker never follows a substituted parent/target, while hostile same-UID relocation of an already acquired inode is explicitly external namespace mutation rather than continuous pathname confinement.
+- Keep the temp descriptor open through hard-link publication; verify target↔temp device/inode identity before and after temp unlink, exact bytes/private policy, atomic no-replace, final fsync, and visible fail-closed residue on hostile drift.
+- Reject reordered-and-resealed manifest read sets, frozen refs, Gate evidence, and MachineResult evidence rather than sorting attacker-supplied persisted order into canonical form.
+- Recheck regular-file type, size, POSIX `0600`, owner, and link count against the actual descriptor read for records, input, results, and lock owner.
+- Keep this 0.6.1 candidate BLOCKED until exact-commit independent review, Sol confirmation, and Linux/Windows CI complete; no local result implies P0, HumanResult, CandidateEvent, dispatch, canonical acceptance, or formal TS-001 execution.
+
 ## 0.6.0 - 2026-08-31
 
 - Freeze `hpi/wire/validation-runtime/v1` for closed ValidationAttemptInput/Record objects, with exact interaction-v1 and execution-v2 dependencies and schema-set digest `598e1ca92f6cedeb97e2e00a4c22703ca5359977c3bd9681a015231fa692d3fa`.

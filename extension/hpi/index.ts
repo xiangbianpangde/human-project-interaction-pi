@@ -19,6 +19,7 @@ import {
 } from "../../src/session.mjs";
 import { buildTalkContent } from "../../src/talk-content.mjs";
 import {
+  VALIDATION_STORE_SECURITY_MODEL,
   buildValidationAttemptProjection,
   getValidationAttemptStatus,
   previewValidationAttempt,
@@ -226,6 +227,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
           executionLifecycle: "SCHEMA_AND_PURE_PREVIEW_ONLY",
           validationRuntimeIntake: "VALIDATION_ATTEMPT_INPUT_V1_ONLY",
           validationRuntimeWriteRoot: ".pi/artifacts/hpi-validation/v1/<attempt_id>",
+          validationRuntimeSecurityModel: VALIDATION_STORE_SECURITY_MODEL,
           validationRuntimeAuthority: "MACHINE_VALIDATION_ONLY",
           formalTs001Status: "NOT-RUN",
           projectMachineStatus: projection.hps.activeWork[0].machineStatus,
@@ -288,6 +290,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
           dependencies: state.validationWireSchema?.dependencies,
           inbound_runtime: "validation_attempt_input_only",
           authority: "MACHINE_VALIDATION_ONLY",
+          store_security_model: VALIDATION_STORE_SECURITY_MODEL,
           isolated_write_root: ".pi/artifacts/hpi-validation/v1/<attempt_id>",
           project_canonical_write: "FORBIDDEN",
           human_result_intake: "FORBIDDEN",
@@ -348,7 +351,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
       `validationWireSchemaSet=${state.validationWireSchema?.schemaSet ?? "unavailable"}`,
       `validationWireSchemaSetDigest=${state.validationWireSchema?.schemaSetDigest ?? "unavailable"}`,
       `nextHumanDecision=${decision?.question ?? "none"}`,
-      "Rules: use hpi_query for structured status; machine facts/test counts/hash/schema are never escalated for human belief; hpi_propose creates session candidates only; HPI cannot write project canonical state; hpi_validation is machine-only, writes only its isolated attempt ledger, and never constitutes formal TS-001, HumanResult, CandidateEvent, dispatch, or canonical authority.",
+      "Rules: use hpi_query for structured status; machine facts/test counts/hash/schema are never escalated for human belief; hpi_propose creates session candidates only; HPI cannot write project canonical state; hpi_validation is machine-only, derives only a root-verified attempt-directory capability, and never constitutes formal TS-001, HumanResult, CandidateEvent, dispatch, or canonical authority.",
     ].join("\n");
     return { systemPrompt: `${event.systemPrompt}\n\n${appendix}` };
   });
@@ -509,13 +512,13 @@ export default function hpiExtension(pi: ExtensionAPI) {
     name: "hpi_validation",
     label: "HPI validation runtime",
     description:
-      "Preview, run, or inspect one explicit ValidationAttemptInput v1. Run writes only an isolated append-only attempt ledger; it never runs formal TS-001 and never writes HumanResult, CandidateEvent, dispatch, or project canonical state.",
+      "Preview, run, or inspect one explicit ValidationAttemptInput v1. Run derives a root-verified directory capability for its append-only attempt ledger; it never runs formal TS-001 and never writes HumanResult, CandidateEvent, dispatch, or project canonical state.",
     promptSnippet: "Run the isolated machine-only validation attempt runtime without canonical or human authority",
     promptGuidelines: [
       "Use only with a caller-declared project-relative ValidationAttemptInput manifest; never infer or discover one from prose, chat, raw drafts, or adjacent files.",
       "Prefer preview before run. A local PASS-ENGINEERING applies only to Validation Runtime Slice V1 and must never be reported as formal TS-001 or P0 acceptance.",
       "Non-terminal attempts are INCOMPLETE_INTERRUPTED and cannot resume; retry requires a new attempt ID and exact retry_of latest-record binding.",
-      "The only write root is .pi/artifacts/hpi-validation/v1/<attempt_id>; HumanResult, CandidateEvent, Agent dispatch, canonical write, and automatic invalidation are forbidden.",
+      "Write authority is ROOT_DERIVED_DIRECTORY_CAPABILITY_V1 for .pi/artifacts/hpi-validation/v1/<attempt_id>; it never follows substituted paths, while hostile same-UID relocation after acquisition is external mutation and must fail closed. HumanResult, CandidateEvent, Agent dispatch, canonical write, and automatic invalidation are forbidden.",
     ],
     executionMode: "sequential",
     parameters: Type.Object({
@@ -534,6 +537,7 @@ export default function hpiExtension(pi: ExtensionAPI) {
       }
       const boundary = {
         authority: "MACHINE_VALIDATION_ONLY",
+        storeSecurityModel: VALIDATION_STORE_SECURITY_MODEL,
         isolatedWriteRoot: ".pi/artifacts/hpi-validation/v1/<attempt_id>",
         formalTs001Status: "NOT-RUN",
         projectCanonicalWrite: "FORBIDDEN",

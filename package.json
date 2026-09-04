@@ -1,6 +1,6 @@
 {
   "name": "human-project-interaction-pi",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "private": true,
   "type": "module",
   "description": "Read-only Human Project State plus a machine-only isolated validation-attempt runtime with frozen wire contracts, deterministic replay/recovery, and no canonical or HumanResult authority.",

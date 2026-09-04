@@ -14,7 +14,7 @@ import {
   validateValidationAttemptRecord,
 } from "./contract.mjs";
 
-export const VALIDATION_RUNTIME_CODEC_VERSION = "hpi-validation-runtime-codec/0.1.0";
+export const VALIDATION_RUNTIME_CODEC_VERSION = "hpi-validation-runtime-codec/0.2.0";
 
 function toWireRef(ref) {
   return {

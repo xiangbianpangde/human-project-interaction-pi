@@ -136,6 +136,10 @@ describe("Pi lifecycle and query", () => {
     assert.equal(data.validation_runtime_contract.schema_set, "hpi/wire/validation-runtime/v1");
     assert.match(data.validation_runtime_contract.schema_set_digest, /^[a-f0-9]{64}$/u);
     assert.equal(data.validation_runtime_contract.inbound_runtime, "validation_attempt_input_only");
+    assert.equal(
+      data.validation_runtime_contract.store_security_model,
+      "ROOT_DERIVED_DIRECTORY_CAPABILITY_V1",
+    );
     assert.equal(data.validation_runtime_contract.project_canonical_write, "FORBIDDEN");
     assert.equal(data.validation_runtime_contract.formal_ts001_status, "NOT-RUN");
     assertSnakeCaseKeys(data);
@@ -262,6 +266,10 @@ describe("/hpi command execution", () => {
     assert.match(notifications[0].message, /"executionWireSchemaSetDigest": "[a-f0-9]{64}"/);
     assert.match(notifications[0].message, /"executionRuntimeIntake": "NOT_IMPLEMENTED"/);
     assert.match(notifications[0].message, /"validationRuntimeIntake": "VALIDATION_ATTEMPT_INPUT_V1_ONLY"/);
+    assert.match(
+      notifications[0].message,
+      /"validationRuntimeSecurityModel": "ROOT_DERIVED_DIRECTORY_CAPABILITY_V1"/,
+    );
     assert.match(notifications[0].message, /"formalTs001Status": "NOT-RUN"/);
   });
 

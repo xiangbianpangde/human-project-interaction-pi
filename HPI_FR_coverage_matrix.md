@@ -1,10 +1,10 @@
 ---
 title: HPI FR-001～FR-024 实现、缺口与验证证据矩阵
 document_id: HPI-FR-MATRIX-001
-revision: 0.5
+revision: 0.6
 status: implementation-snapshot
-updated: 2026-08-31
-scope: HPI package 0.6.0 implementation candidate; interaction-v1 + preserved execution-v1 + execution-v2 + validation-runtime-v1; TS-001/R-ICL read-only Adapters
+updated: 2026-09-04
+scope: HPI package 0.6.1 corrective candidate; interaction-v1 + preserved execution-v1 + execution-v2 + frozen validation-runtime-v1 shape with runtime 0.2.0 companion; TS-001/R-ICL read-only Adapters
 ---
 
 # HPI FR-001～FR-024 覆盖矩阵
@@ -51,7 +51,7 @@ scope: HPI package 0.6.0 implementation candidate; interaction-v1 + preserved ex
 | FR-013 | 重复提交幂等；retry 新 attempt；无第二次 commit | **部分实现** | 通用 Result classifier 仍为 pure preview；validation attempt 使用 exclusive lock + append-only records，exact replay 零追加，same-ID divergent input conflict，retry 新 ID 并精确绑定旧 latest record | 仅为隔离 validation ledger；缺项目级并发 transaction、Bundle commit、expected-version lock 与 canonical rollback |
 | FR-014 | NOT-RUN/INCOMPLETE/DEVIATIONS/BLOCKED、恢复路径和 Reconciler | **部分实现** | validation fresh process 将 non-terminal 固定解释为 INCOMPLETE_INTERRUPTED，残留 lock/unknown/temp/chain drift fail closed且不夺锁；outbox conflict 与 StaleReport preview 保留 | 不实现自动续跑、stale-lock reclaim、通用 Reconciler、项目 half-commit 扫描或下游状态更新 |
 | FR-015 | 用户可创建新 Pain 并关联触发证据 | **部分实现** | `hpi_propose(op="pain")` 创建 source-bound session candidate | 候选没有项目 canonical writer；触发证据和范围裁决尚未正式入库 |
-| FR-016 | 文件、Schema、hash、引用、路径、状态前置由确定性检查完成 | **部分实现** | 四套 schema lineage 严格编译；validation V1 对显式 TS-001 refs 执行 bounded regular/no-symlink/raw-byte SHA Gate、read-set closure、固定 write root/network DENY 和 authority Gate | Gate 仅覆盖 closed TS-001 validation slice，不是通用 artifact/permission/evidence sandbox 或 canonical transaction |
+| FR-016 | 文件、Schema、hash、引用、路径、状态前置由确定性检查完成 | **部分实现** | 四套 schema lineage 严格编译；validation V1 对显式 TS-001 refs 执行 bounded regular/no-symlink/raw-byte SHA Gate、read-set closure、root-derived directory-capability/network DENY 和 authority Gate | Gate 仅覆盖 closed TS-001 validation slice；不承诺 hostile same-UID mutation 下的 continuous pathname containment，也不是通用 sandbox 或 canonical transaction |
 | FR-017 | HPS 是既有 canonical/worklog 的可追溯投影，不建第二真源 | **试点已实现** | 两个 Adapter 只读 declared set；读取拒绝 symlink、非普通文件、越界 realpath 和单文件 >2 MiB；R-ICL 只认唯一当前/worklog；query 不写 session | 仅证明两个 Adapter；新宿主仍需逐个声明真源映射与禁止路径 |
 | FR-018 | 用户可询问来源、变化、设计和未解决项 | **部分实现** | `hpi_query brief/trace/evidence` 与 L2–L4 可展开 | 缺通用自然语言对象解析、分页和敏感 provenance 过滤策略 |
 | FR-019 | 项目级 brief 频率、风险级别和摘要粒度设置 | **未实现** | 无配置 API | 需项目级偏好 Schema、权限和默认策略；不得改变事实轴 |
@@ -78,7 +78,7 @@ scope: HPI package 0.6.0 implementation candidate; interaction-v1 + preserved ex
 | 自由文本伪装 DESIGN 可绕过机器事实 regex | human Gate 改为 projector-owned request binding；question/category echo 改写拒绝 | 中英 8 组 paraphrase、stale/missing request/digest/source 负向测试；Extension 正向 binding 测试 |
 | malformed/divergent outbox / duplicate logical IDs | outbox v2 完整 envelope/digest/receipt/timestamp 校验；same-event divergent digest 整组 quarantine；projector 前置唯一性 Gate | malformed envelope、candidate tamper、`[A,B]`/`[B,A]` conflict 等价、Pain/Design/Task/Result/Request duplicate |
 | Windows path、timestamp、Adapter hostile input | 新 execution v2 path schema；严格 RFC3339；有界 regular-file reader | drive/UNC/backslash/dot/control、date-only/no-zone/invalid date、symlink/intermediate-link/oversize/directory 负向测试 |
-| Validation attempt replay/recovery 被误当项目权威 | 独立 validation set/authority；cwd-anchored atomic-no-replace store；完整五 Gate chain；persisted success 与 canonical Gate/fact derivation精确相等；runtime/status 重跑 current Gates，restricted projector 在 Gate/base drift/unavailable 时 fail closed；正式 TS-001 保留 NOT-RUN | zero-write preview、store-only diff、parent swap、concurrent target、mode/link count、五 Gate forged PASS、current-result/gate drift、exact replay、divergent conflict、retry success/non-latest/locked、workspace/authority expansion、snapshot cardinality、ref TOCTOU、R-ICL rejection、Linux normal/crash fresh-process 与 Windows runtime tests |
+| Validation attempt replay/recovery 被误当项目权威 | runtime 0.2 将 `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1` 绑定 input identity；capability-relative atomic-no-replace + temp↔target object binding；persisted array order 与 Gate/fact derivation精确相等；实际 read descriptor 复验 private policy；current Gates/source drift fail closed；正式 TS-001 保留 NOT-RUN | parent replacement、outside inode relocation（明确为 external mutation）、publication target substitution、concurrent target、descriptor mode/link、重排+reseal、五 Gate forged PASS、current drift、replay/retry/ref TOCTOU、fresh-process 与 Windows runtime tests；fresh Sol `c9906f95…` 的 BLOCK 待新 exact commit 复审关闭 |
 
 ## 5. 真实 R-ICL Adapter 读边界
 
@@ -108,10 +108,11 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 
 ## 6. 下一关闭顺序
 
-1. 关闭全仓 Sol job `2a80405f…` 的 package-level Issue #7：installer ownership-preserving removal 须通过精确提交复审与 Linux/Windows CI；VRS1 RELEASE 不受该包级 P2 影响。
-2. 解决或界定 Issue #2；安装/升级后的可靠 fallback 是 fresh Pi process/session，`/reload` 只作 fail-safe 负向，不当恢复证明。
-3. 保持 developer conformance 与正式 TS-001 lane 分离；后者必须补齐授权来源与独立 Validation Agent，当前合同继续 `NOT-RUN`。
-4. 再在 Adapter 中只读发现真实 Handoff/Result/Evidence；缺失保持 `INCOMPLETE`，不得把 source prose 转成 Bundle。
-5. 冻结仍缺的 ExperimentSpec、ValidationResult 与项目 Event/Recovery transaction；既有四套 wire set immutable。
-6. 接入独立 Implementation/Validation Agent 与通用 permission/reference/evidence Gate；之后才设计 HumanResult inbound 与受保护 canonical writer。
-7. 用真实跨会话任务完成用户体验验收，测量 why/change/remaining/next 恢复成本。
+1. 完成 0.6.1 exact corrective commit：验证 capability security-model identity、publication object binding、canonical wire ordering 与 descriptor-bound reopen；获得独立复审、Sol confirmation 及 Linux/Windows CI 后再关闭 Issue #3。
+2. 保留 installer Issue #7 已关闭证据，但 0.6.0 package RELEASE prose 已被 fresh VRS1 BLOCK 覆盖；不得把旧 verdict 外推到 0.6.1。
+3. 解决或界定 Issue #2；安装/升级后的可靠 fallback 是 fresh Pi process/session，`/reload` 只作 fail-safe 负向，不当恢复证明。
+4. 保持 developer conformance 与正式 TS-001 lane 分离；后者必须补齐授权来源与独立 Validation Agent，当前合同继续 `NOT-RUN`。
+5. 再在 Adapter 中只读发现真实 Handoff/Result/Evidence；缺失保持 `INCOMPLETE`，不得把 source prose 转成 Bundle。
+6. 冻结仍缺的 ExperimentSpec、ValidationResult 与项目 Event/Recovery transaction；既有四套 wire set immutable。
+7. 接入独立 Implementation/Validation Agent 与通用 permission/reference/evidence Gate；之后才设计 HumanResult inbound 与受保护 canonical writer。
+8. 用真实跨会话任务完成用户体验验收，测量 why/change/remaining/next 恢复成本。

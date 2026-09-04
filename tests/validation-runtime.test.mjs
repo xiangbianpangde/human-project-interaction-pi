@@ -20,6 +20,7 @@ import { sealRecord } from "../src/execution/contract.mjs";
 import { rebuildTs001Projection } from "../src/projector.mjs";
 import {
   VALIDATION_STORE_PREFIX,
+  VALIDATION_STORE_SECURITY_MODEL,
   sha256Bytes,
 } from "../src/validation-runtime/contract.mjs";
 import {
@@ -82,6 +83,7 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
 
       const preview = previewValidationAttempt(root, fixture.manifestPointer);
       assert.equal(preview.accepted, true);
+      assert.equal(preview.storeSecurityModel, VALIDATION_STORE_SECURITY_MODEL);
       assert.equal(preview.wroteStore, false);
       assert.equal(existsSync(storeRoot), false);
       assert.deepEqual(projectFiles(root), beforeFiles);
@@ -98,6 +100,8 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
       ]);
       assert.equal(result.history.terminal.outcome, "MACHINE_RESULT_PRODUCED");
       assert.equal(result.authority.projectCanonicalWrite, "FORBIDDEN");
+      assert.equal(result.storeSecurityModel, VALIDATION_STORE_SECURITY_MODEL);
+      assert.equal(result.history.records[0].runtime.runtimeVersion, "0.2.0");
       assert.equal(result.projectCanonicalChanged, false);
       assert.deepEqual(authorityDigests(root), beforeAuthority);
 
@@ -110,7 +114,7 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
       );
 
       const projected = buildValidationAttemptProjection(root, fixture.wire.validation_attempt_id);
-      assert.equal(projected.projection.adapter, "ts001-validation-runtime/0.1.0");
+      assert.equal(projected.projection.adapter, "ts001-validation-runtime/0.2.0");
       assert.equal(projected.projection.hps.phase, "MACHINE_VALIDATION");
       assert.equal(projected.projection.hps.activeWork[0].machineStatus, "PASS-ENGINEERING");
       assert.equal(projected.projection.hps.activeWork[0].humanStatus, "NOT_NEEDED");
@@ -242,6 +246,13 @@ describe("Validation Runtime Slice V1 end-to-end", () => {
       const fixture = buildValidationAttemptFixture(root, { attemptId: "VRS1-GATE-NEGATIVE" });
       const intake = readValidationAttemptInput(root, fixture.manifestPointer);
       const cases = [
+        {
+          expectedGate: "V1_IDENTITY",
+          expectedCode: "IDENTITY_CONTRACT_REFS",
+          mutate(input) {
+            [input.contractRefs, input.inputRefs] = [input.inputRefs, input.contractRefs];
+          },
+        },
         {
           expectedGate: "V1_WORKSPACE",
           expectedCode: "WORKSPACE_READ_WRITE_OVERLAP",

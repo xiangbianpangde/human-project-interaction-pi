@@ -6,8 +6,8 @@ Human Project Interaction（HPI）是面向多 Agent、跨会话项目的**只�
 
 - **TS-001 Adapter `ts001-pilot/0.1.0`**：冻结的自包含试点，只读本目录三份材料；机器状态保持 `NOT-RUN`。
 - **Package `0.5.0` 只读基线**：精确提交 `c79542b…` 经独立复审给出 RELEASE，并以 merge commit `5cbc57a…` 合入 `main`；TS-001 仍为 `NOT-RUN`。
-- **Package `0.6.0` Validation Runtime Slice V1**：Sol 对初始 merge tree 的 BLOCK 已由 corrective commit `cd64c07…` 关闭；同线程复审给出 VRS1-only RELEASE、无剩余 P1/P2，PR #5 以 merge commit `3bbbc42…` 合入 `main`，post-merge Linux/Windows CI 全绿。
-- **Package `0.6.0` package-level verdict**：Issue #7 corrective candidate `8393d3d…`（tree `cc359a8…`）经独立复审与 Sol same-thread follow-up `38ed711f…` 判为 **RELEASE WITH OBSERVATIONS**，P0/P1/P2 均为 0；PR #8 以 merge commit `7ccbaab…` 合入相同 tree，exact-head CI `33487922214` 与 post-merge CI `33489305184` 的 Linux/Windows jobs 全绿，Issue #7 已关闭。非阻断 P3 包括 hostile same-user final quarantine race、bundled validator provenance hardening，以及 Issue #2 的 stale `/reload`。
+- **Package `0.6.0` 历史状态**：VRS1 corrective commit `cd64c07…` 与 installer corrective tree `cc359a8…` 曾分别获得 RELEASE；但 fresh Sol job `c9906f95…` 随后对精确 VRS1 tree `32ff6ec…` 给出新的 BLOCK，因此旧 VRS1/package RELEASE prose 已被覆盖。installer Issue #7 的关闭结论不受影响。
+- **Package `0.6.1` corrective candidate**：采用 `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1`，关闭 persisted ordering 与 descriptor-binding 缺口，并加强 publication object identity；在新的精确提交复审、Sol 确认和 Linux/Windows CI 完成前保持 **BLOCK**。
 - **完整 P0：未关闭**。详见 [FR-001～FR-024 覆盖矩阵](HPI_FR_coverage_matrix.md)。
 
 已实现的试点能力：
@@ -80,7 +80,7 @@ v2 没有原地修补 v1。它修正 host-independent scoped path，并由 compa
 
 完整设计与权威矩阵见 [`validation-runtime-slice-v1-design.md`](validation-runtime-slice-v1-design.md)。V1 固定状态机为 `DECLARED → ACCEPTED → RUNNING → TERMINAL`，并只对自身 attempt history、receipt 与 replay identity 有权威。五个局部 Gate 为 `V1_SCHEMA`、`V1_IDENTITY`、`V1_REFERENCE`、`V1_WORKSPACE`、`V1_AUTHORITY`。
 
-attempt store 使用 exclusive lock、0700 store 目录和 0600 文件。写入由隔离子进程从经 device/inode + realpath 核对的 cwd 逐段锚定，temp 写入并 fsync 后以 hard-link 发布实现 atomic no-replace；目标出现、目录替换、unsafe mode/link count 均 fail closed。crash 后保留 non-terminal/lock 证据，不实现 stale-lock reclaim 或自动续跑。受限投影使用 Adapter label `ts001-validation-runtime/0.1.0`，primary task 的 human axis 固定 `NOT_NEEDED`，同时保留正式 TS-001 work item 的 `NOT-RUN`；历史局部 PASS 只有在 persisted Gate/fact 与共享 canonical derivation 精确一致、当前五 Gate 重新验证通过且 Adapter source 未漂移时才保持 current PASS，否则降为 `INCOMPLETE` 或 `null`。删除隔离 store 只删除验证历史，不回滚或修改项目语义状态。
+attempt store 使用 exclusive lock、0700 store 目录和 0600 文件。Validation runtime `0.2.0` 将 `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1` 绑定进 input identity：隔离 worker 只通过 project root 下的逐段 relative traversal 获得目录 capability，之后只做 capability-relative mutation，绝不跟随被替换的 parent/target。它不声称能阻止 hostile same-UID 进程在 capability 获得后搬移同一 inode；这属于外部 namespace mutation，检测到时 fail closed，不能成为 current trusted state。temp descriptor 保持打开至 hard-link atomic-no-replace 发布完成，并与 target 的 device/inode、bytes 和私有属性前后绑定。crash/hostile drift 的残留证据不自动清理或夺锁。受限投影继续保留正式 TS-001 `NOT-RUN`；只有 canonical wire ordering、Gate/fact derivation、当前五 Gate 与 Adapter source 全部匹配时，历史局部 PASS 才能保持 current PASS。
 
 ## 结构
 
@@ -165,7 +165,7 @@ hpi_validation(op="run", manifestPath=".pi/validation-inputs/<manifest>.json")
 hpi_validation(op="status", attemptId="<attempt-id>")
 ```
 
-先 preview 再 run。preview 零写入；run 只写 attempt 专属隔离根。相同 input 的 terminal replay 不追加；同 attempt ID 的 divergent input 返回 conflict；non-terminal history 只解释为 `INCOMPLETE_INTERRUPTED`，重试必须使用新 ID 与精确 `retry_of`。`runtime.machineResult` / status 顶层 `machineResult` 始终重新验证当前五 Gate 与 TS-001 read-only snapshot；不可用时为 `null`，任一 Gate 或 source 漂移时降为 `INCOMPLETE`。`history.machineResult` / `historicalMachineResult` 只是不可变历史，不得作为当前 PASS。该工具的 `PASS-ENGINEERING` 只属于 V1 局部 Gate，不是正式 TS-001、P0、HumanResult 或 canonical 接受。
+先 preview 再 run。preview 零写入；run 只能从声明的 attempt 根派生目录 capability 并在该 capability 内相对写入。相同 input 的 terminal replay 不追加；同 attempt ID 的 divergent input 返回 conflict；non-terminal history 只解释为 `INCOMPLETE_INTERRUPTED`，重试必须使用新 ID 与精确 `retry_of`。`runtime.machineResult` / status 顶层 `machineResult` 始终重新验证 canonical persisted order、当前五 Gate 与 TS-001 read-only snapshot；不可用时为 `null`，任一 Gate/source/store 漂移时降为 `INCOMPLETE` 或 fail closed。hostile same-UID 外部进程对已获得 inode 的后续搬移/改写不属于 VRS1 可防止的连续 pathname 保证。该工具的 `PASS-ENGINEERING` 只属于 V1 局部 Gate，不是正式 TS-001、P0、HumanResult 或 canonical 接受。
 
 `hpi_propose(op="escalation")` 不再从任意自然语言 mint HumanEscalationRequest。候选必须绑定 projector 当前产生的 `requestId + requestDigest + sourceDigest`；regex 仅作为额外机器事实拒绝层。`talk_poll_events` 返回的 HPI 事件仍必须完整传给 `hpi_propose(op="ingest_talk_event")`。
 
@@ -212,10 +212,10 @@ HPI_RICL_V4_ROOT="/path/to/R-ICL-v4" npm run test:ricl
 9. outbox v2 将完整 candidate digest 绑定到 receipt；同 `eventId` 不同 digest 产生确定性 `CANDIDATE_IDENTITY_CONFLICT` 且不恢复任一候选；malformed entry 只隔离单条；
 10. scoped path 跨平台 fail closed，timestamp codec 成功的对象必须通过 frozen schema；
 11. Adapter 与 validation intake 不跟随 symlink、不读取非普通或超限输入；ref SHA 必须等于原始 bytes；
-12. validation record 必须连续、内容寻址并完整绑定五个 Gate；所有成功 code/evidence 与 MachineResult kind/statement/evidence/limitations 必须等于共享 canonical derivation；
+12. validation record 必须连续、内容寻址、保持 canonical wire ordering 并完整绑定五个 Gate；所有 code/evidence 与 MachineResult kind/statement/evidence/limitations 必须等于共享 canonical derivation；
 13. exact replay 零追加；divergent attempt conflict；fresh process 中 non-terminal 永不恢复成完成，残留 lock 不自动夺取；
-14. write worker 必须逐段锚定 cwd，atomic no-replace，不跟随替换后的 parent/target；POSIX reopen 必须验证 0700/0600、owner 与单 link；
+14. write worker 必须从 project root 派生 `ROOT_DERIVED_DIRECTORY_CAPABILITY_V1`、只做 capability-relative atomic-no-replace mutation、不跟随替换后的 parent/target，并验证 temp↔target object identity；POSIX reopen 必须在实际读取 descriptor 上验证 0700/0600、owner 与单 link；
 15. store 外项目权威文件前后 SHA 不变；historical PASS 在 current Gate/source 漂移或不可用时不得由 runtime 或投影显示为当前 PASS；`NOT-RUN` 不得显示为正式 PASS；Machine 与 Human 状态不得合并；
 16. installer/uninstaller 不得依据旧 pathname classification 删除目录项；删除和 rollback 必须 lock、原子 quarantine、重新验证并保留任何 ownership drift。
 
-GitHub 公开仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线候选 `c79542b…` 经独立复审 RELEASE，合并树为 `5cbc57a…`，post-merge CI 全绿。0.6 初始 VRS1 merge commit `5c10b42…`（tree `54b6573…`）的早期本地 RELEASE 曾被 Sol job `29d0ee3f…` 的 BLOCK 覆盖；corrective commit `cd64c07…` 随后经独立精确提交确认和 Sol 同线程 job `2579940c…` 复审均给出 VRS1-only RELEASE、无剩余 P1/P2，以 `3bbbc42…` 合入 `main`。全仓 Sol job `2a80405f…` 继续确认 VRS1 RELEASE，但因 installer ownership TOCTOU 对 package 0.6.0 给出 BLOCK；Issue #7 corrective candidate 在精确提交复审和跨平台 CI 前不称 package RELEASE。以上结论均不得外推为正式 TS-001、完整 P0、HumanResult 或 canonical 接受。
+GitHub 公开仓库：`https://github.com/xiangbianpangde/human-project-interaction-pi`。0.5 只读基线 RELEASE 与 installer Issue #7 的独立关闭证据仍保留。VRS1 tree `32ff6ec…` 虽曾由 Sol job `2579940c…` 判 RELEASE，但 fresh independent job `c9906f95…` 随后以更窄的 relocated-inode、canonical ordering 和 descriptor-binding 机制重新判 **BLOCK**；follow-up `f2762c44…` 确认 strict continuous pathname containment 在 hostile same-UID 模型下不能由 openat2 或纯 Node 可移植地保证，并建议采用显式 root-derived directory-capability contract。当前 0.6.1 corrective candidate 尚未获得 RELEASE；任何后续结论均不得外推为正式 TS-001、完整 P0、HumanResult 或 canonical 接受。

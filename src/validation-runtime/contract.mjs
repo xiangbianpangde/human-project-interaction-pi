@@ -20,7 +20,8 @@ import {
   VALIDATION_RUNTIME_WIRE_SCHEMA_SET_DIGEST,
 } from "../wire-schema.mjs";
 
-export const VALIDATION_RUNTIME_VERSION = "hpi-validation-runtime/0.1.0";
+export const VALIDATION_RUNTIME_VERSION = "hpi-validation-runtime/0.2.0";
+export const VALIDATION_STORE_SECURITY_MODEL = "ROOT_DERIVED_DIRECTORY_CAPABILITY_V1";
 export const VALIDATION_ATTEMPT_INPUT_SCHEMA = "hpi/validation-attempt-input/v1";
 export const VALIDATION_ATTEMPT_RECORD_SCHEMA = "hpi/validation-attempt-record/v1";
 export const VALIDATION_ATTEMPT_INPUT_WIRE_SCHEMA = "hpi/wire/validation-attempt-input/v1";
@@ -194,7 +195,13 @@ export function validationRuntimeIdentity(value, path = "runtime") {
 }
 
 function refsWithPointers(value, path, { min = 0 } = {}) {
-  const refs = wrapExecution(path, () => frozenRefs(value, path, { min }));
+  const refs = wrapExecution(path, () => frozenRefs(value, path, { min, sort: false }));
+  const canonical = refs.toSorted((left, right) =>
+    frozenIdentityKey(left).localeCompare(frozenIdentityKey(right)),
+  );
+  if (JSON.stringify(refs) !== JSON.stringify(canonical)) {
+    fail(path, "must use canonical frozen-identity order");
+  }
   refs.forEach((ref, index) => {
     if (!ref.pointer) fail(`${path}[${index}].pointer`, "is required for validation-runtime input");
     validationScopedPath(ref.pointer, `${path}[${index}].pointer`);
@@ -242,6 +249,7 @@ export function computeValidationInputDigest(input) {
     schema: VALIDATION_ATTEMPT_INPUT_SCHEMA,
     validationAttemptId: input.validationAttemptId,
     attemptFamily: input.attemptFamily,
+    storeSecurityModel: VALIDATION_STORE_SECURITY_MODEL,
     projectId: input.projectId,
     adapter: input.adapter,
     taskRef: input.taskRef,
@@ -312,8 +320,10 @@ export function validateValidationAttemptInput(value, path = "validationAttemptI
   const contractRefs = refsWithPointers(object.contractRefs, `${path}.contractRefs`, { min: 1 });
   const inputRefs = refsWithPointers(object.inputRefs, `${path}.inputRefs`, { min: 1 });
   const declaredReadSet = exactStrings(object.declaredReadSet, `${path}.declaredReadSet`, { min: 1 })
-    .map((pointer, index) => validationScopedPath(pointer, `${path}.declaredReadSet[${index}]`))
-    .sort();
+    .map((pointer, index) => validationScopedPath(pointer, `${path}.declaredReadSet[${index}]`));
+  if (JSON.stringify(declaredReadSet) !== JSON.stringify(declaredReadSet.toSorted())) {
+    fail(`${path}.declaredReadSet`, "must use canonical pointer order");
+  }
   const allRefs = [taskRef, ...contractRefs, ...inputRefs];
   const allIdentityKeys = allRefs.map((ref) => frozenIdentityKey(ref));
   if (new Set(allIdentityKeys).size !== allIdentityKeys.length) {
@@ -392,7 +402,15 @@ function gateOutcome(value, path) {
   const gate = enumValue(object.gate, VALIDATION_GATES, `${path}.gate`);
   const status = enumValue(object.status, VALIDATION_GATE_STATUSES, `${path}.status`);
   const code = nonEmpty(object.code, `${path}.code`);
-  const evidenceRefs = wrapExecution(path, () => frozenRefs(object.evidenceRefs, `${path}.evidenceRefs`));
+  const evidenceRefs = wrapExecution(path, () =>
+    frozenRefs(object.evidenceRefs, `${path}.evidenceRefs`, { sort: false }),
+  );
+  const canonicalEvidenceRefs = evidenceRefs.toSorted((left, right) =>
+    frozenIdentityKey(left).localeCompare(frozenIdentityKey(right)),
+  );
+  if (JSON.stringify(evidenceRefs) !== JSON.stringify(canonicalEvidenceRefs)) {
+    fail(`${path}.evidenceRefs`, "must use canonical frozen-identity order");
+  }
   if (status === "PASSED" && evidenceRefs.length === 0) {
     fail(`${path}.evidenceRefs`, "PASSED Gate outcomes require immutable evidence");
   }

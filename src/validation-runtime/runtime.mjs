@@ -5,6 +5,7 @@ import {
   VALIDATION_ATTEMPT_RECORD_SCHEMA,
   VALIDATION_AUTHORITY,
   VALIDATION_RUNTIME_VERSION,
+  VALIDATION_STORE_SECURITY_MODEL,
 } from "./contract.mjs";
 import {
   evaluateValidationAttemptGates,
@@ -93,6 +94,7 @@ function result(kind, intake, extras = {}) {
     inputRevision: intake.input.inputRevision,
     inputDigest: intake.input.inputDigest,
     authority: VALIDATION_AUTHORITY,
+    storeSecurityModel: VALIDATION_STORE_SECURITY_MODEL,
     projectCanonicalChanged: false,
     ...extras,
   };
@@ -315,6 +317,7 @@ export function getValidationAttemptStatus(projectRoot, attemptId) {
     schema: "hpi/validation-attempt-status/v1",
     attemptId,
     authority: VALIDATION_AUTHORITY,
+    storeSecurityModel: VALIDATION_STORE_SECURITY_MODEL,
     history,
     ...currentMachineResultView(projectRoot, history),
     projectCanonicalChanged: false,

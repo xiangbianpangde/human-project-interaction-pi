@@ -46,6 +46,36 @@ describe("bounded authoritative Adapter files", () => {
     }
   });
 
+  it("binds caller-specific policy to the descriptor actually read", () => {
+    const root = fixtureRoot();
+    try {
+      const opened = [];
+      const buffers = readAuthoritativeFileBuffers(root, files, {
+        maxBytes: 1024,
+        validateOpenedFile(stats, context) {
+          assert.equal(stats.isFile(), true);
+          opened.push(context.pointer);
+        },
+      });
+      assert.equal(buffers.current.toString("utf8"), "current\n");
+      assert.deepEqual(opened, ["README.md", "nested/current.md"]);
+      assert.throws(
+        () => readAuthoritativeFileBuffers(root, { root: "README.md" }, {
+          validateOpenedFile() {
+            throw new Error("descriptor policy rejected");
+          },
+        }),
+        /descriptor policy rejected/u,
+      );
+      assert.throws(
+        () => readAuthoritativeFileBuffers(root, files, { validateOpenedFile: true }),
+        /validateOpenedFile must be a function/u,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects final and intermediate symlinks instead of following provenance outside the root", () => {
     const outside = mkdtempSync(join(tmpdir(), "hpi-authority-outside-"));
     writeFileSync(join(outside, "secret.md"), "secret\n", "utf8");
