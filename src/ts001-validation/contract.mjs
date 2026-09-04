@@ -218,3 +218,96 @@ export function validatePathPermission(targetPath, permissionScope, path = "path
   }
   return true;
 }
+
+export function attemptSpecMutation(spec, mutation, path = "spec") {
+  if (!spec || typeof spec !== "object") fail("TS001_SPEC_INVALID", `${path} must be an object`);
+  if (spec.status === "frozen") {
+    fail("TS001_READONLY_MUTATION_DENIED", `cannot mutate frozen ExperimentSpec: ${spec.experiment_id || spec.title} (G-002 / Q-006)`);
+  }
+  return { ...spec, ...mutation };
+}
+
+export function validateValidationRunningPrerequisites({ implTask, candidateRef }) {
+  if (!implTask || typeof implTask !== "object") {
+    fail("TS001_VAL_PRECONDITIONS_UNMET", "IMPL TaskSlice is required to start VAL");
+  }
+  if (implTask.machine_status !== "PASS-ENGINEERING" && implTask.machine_status !== "ACCEPTED") {
+    fail(
+      "TS001_VAL_PRECONDITIONS_UNMET",
+      `IMPL must be accepted before VAL enters running, current status: ${implTask.machine_status}`,
+    );
+  }
+  if (!candidateRef || !candidateRef.sha256) {
+    fail("TS001_VAL_PRECONDITIONS_UNMET", "candidate SHA must be frozen before VAL enters running");
+  }
+  return true;
+}
+
+export function validateDataProvenanceRef(dataRef, path = "dataRef") {
+  if (!dataRef || typeof dataRef !== "object") {
+    fail("TS001_DATA_PROVENANCE_INVALID", `${path} must be a valid data reference object (INV-016)`);
+  }
+  const dataClass = dataRef.data_class;
+  if (!dataClass || !TS001_DATA_CLASSES.includes(dataClass)) {
+    fail(
+      "TS001_DATA_PROVENANCE_INVALID",
+      `${path} missing or unregistered data_class: ${String(dataClass)} (INV-016)`,
+    );
+  }
+  return true;
+}
+
+export function assertOptimisticVersion({ currentRevision, expectedRevision }) {
+  if (currentRevision === undefined || expectedRevision === undefined) {
+    fail("TS001_VERSION_REQUIRED", "currentRevision and expectedRevision are required");
+  }
+  if (currentRevision !== expectedRevision) {
+    fail(
+      "TS001_STALE_EXPECTED_VERSION",
+      `optimistic version conflict: expected ${expectedRevision}, got ${currentRevision} (Q-006)`,
+      { currentRevision, expectedRevision },
+    );
+  }
+  return true;
+}
+
+export function verifyHandoffBundleIntegrity(handoffBundle, computedSha) {
+  if (!handoffBundle || typeof handoffBundle !== "object") {
+    fail("TS001_HANDOFF_BUNDLE_INVALID", "handoffBundle must be an object");
+  }
+  const claimedSha = handoffBundle.handoff_revision;
+  if (!claimedSha || !computedSha || claimedSha !== computedSha) {
+    fail(
+      "TS001_HANDOFF_SHA_MISMATCH",
+      `HandoffBundle integrity verification failed: claimed ${claimedSha}, computed ${computedSha}`,
+      { claimedSha, computedSha },
+    );
+  }
+  return true;
+}
+
+export function assertIntendedReceiver(handoffBundle, actualReceiverId) {
+  if (!handoffBundle || typeof handoffBundle !== "object") {
+    fail("TS001_HANDOFF_BUNDLE_INVALID", "handoffBundle must be an object");
+  }
+  const intendedId = handoffBundle.receiver?.agent_id;
+  if (!intendedId || intendedId !== actualReceiverId) {
+    fail(
+      "TS001_RECEIVER_MISMATCH",
+      `receiver mismatch: intended ${intendedId}, got ${actualReceiverId}`,
+      { intendedId, actualReceiverId },
+    );
+  }
+  return true;
+}
+
+export function assertCandidateNotDrifted({ preValSha, postValSha }) {
+  if (!preValSha || !postValSha || preValSha !== postValSha) {
+    fail(
+      "TS001_CANDIDATE_DRIFT",
+      `candidate SHA drifted before VAL execution: preValSha ${preValSha} !== postValSha ${postValSha}: fail closed`,
+      { preValSha, postValSha },
+    );
+  }
+  return true;
+}

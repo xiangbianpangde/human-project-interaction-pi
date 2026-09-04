@@ -11,218 +11,249 @@
       "group": "SCHEMA",
       "name": "合法 TaskSlice fixture",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/task-slices/ts001-impl.v2.json"
+      "evidence_pointer": "tests/fixtures/ts001/task-slices/ts001-impl.v2.json",
+      "evidence_sha256": "c176616d8cd0bfee9fda4248e6dba94c4350eadf180045e694bd6d0cb2251853"
     },
     {
       "id": "TS1-S-002",
       "group": "SCHEMA",
       "name": "合法 HandoffBundle fixture",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/handoff-bundles/valid.v2.json"
+      "evidence_pointer": "tests/fixtures/ts001/handoff-bundles/valid.v2.json",
+      "evidence_sha256": "bfc3964d7af6e08dcfb2a7eefa71ddce1784d2ef89bdd051c1238de6803482d0"
     },
     {
       "id": "TS1-S-003",
       "group": "SCHEMA",
       "name": "合法 ResultBundle fixture",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/result-bundles/valid.v2.json"
+      "evidence_pointer": "tests/fixtures/ts001/result-bundles/valid.v2.json",
+      "evidence_sha256": "0aa94f5fffc970cbf7484a4fba5b47180243fe591558e2cee0f9844b579127bd"
     },
     {
       "id": "TS1-S-004",
       "group": "SCHEMA",
       "name": "合法 ExperimentSpec 只读 fixture",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/experiment-specs/e017.v4.json"
+      "evidence_pointer": "tests/fixtures/ts001/experiment-specs/e017.v4.json",
+      "evidence_sha256": "07037e585c1a01d3d3a64ac01d47c6222fba663c7fd5ee38cd1f8f68b8e2a617"
     },
     {
       "id": "TS1-S-005",
       "group": "SCHEMA",
       "name": "删除必填字段拒绝",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-005.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-005.json",
+      "evidence_sha256": "8d96fa336aecf032ecee3b61cdd31e97e4740b56c7421c4b66e5e1f5b50506fb"
     },
     {
       "id": "TS1-S-006",
       "group": "SCHEMA",
       "name": "字段类型错误拒绝",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-006.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-006.json",
+      "evidence_sha256": "09e57af15b39a8500bd090715d454e3cd930d3ab9b9ad337e4c5aa4efab5e5d6"
     },
     {
       "id": "TS1-S-007",
       "group": "SCHEMA",
       "name": "不合规 task_id 格式拒绝",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-007.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-007.json",
+      "evidence_sha256": "8af34ef45b33c645ec6b956d50255fd17f2f432065d34df20f1ec863fbc83761"
     },
     {
       "id": "TS1-S-008",
       "group": "SCHEMA",
       "name": "封闭枚举外 data_class 拒绝 (INV-016)",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-008.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-008.json",
+      "evidence_sha256": "abe4c2d11b72be430389eaaec532daffbdd78027994bf56488b02c1a9bf384b2"
     },
     {
       "id": "TS1-S-009",
       "group": "SCHEMA",
       "name": "VAL verdict 非词表值拒绝",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-009.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-009.json",
+      "evidence_sha256": "730058d9b4ac737f3376ca343b5033057d928503d35bf713ec6bb925ec74f9bf"
     },
     {
       "id": "TS1-S-010",
       "group": "SCHEMA",
       "name": "重复 entity_id 拒绝 (INV-002)",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-010.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-010.json",
+      "evidence_sha256": "7607f74853a10ab95da6694e09277808918c79a7e0777ee35a5b194d6dd189e8"
     },
     {
       "id": "TS1-S-011",
       "group": "SCHEMA",
       "name": "缺失 integrity rule/Gate 配置 fail closed (INV-012)",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-011.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-011.json",
+      "evidence_sha256": "207654c56d0b82ad1f19cf4ed8921a350b14c01138b1fdeefaa29bdee68c77c8"
     },
     {
       "id": "TS1-P-001",
       "group": "PERMISSION_REF",
       "name": "spec_ref 不存在时拒绝 (INV-004)",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-001.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-001.json",
+      "evidence_sha256": "f5baa8df7784aa5e5d38975e7680985e6a6dffe63d3817bc9c7d28ceaddb510e"
     },
     {
       "id": "TS1-P-002",
       "group": "PERMISSION_REF",
       "name": "artifact hash 不符时拒绝 (INV-005)",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-002.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-002.json",
+      "evidence_sha256": "fbc75d2968259127c34c4e57babcdfb7f73345061ac3b93701a6ea4c1ba3d309"
     },
     {
       "id": "TS1-P-003",
       "group": "PERMISSION_REF",
       "name": "写入 allowlist 外路径拒绝 (INV-007)",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-003.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-003.json",
+      "evidence_sha256": "7cf50be53bc3a2c8ca2e380f6b38cd95041299d26cf16b188f5b75b4aac89936"
     },
     {
       "id": "TS1-P-004",
       "group": "PERMISSION_REF",
       "name": "只读 ExperimentSpec 发起 mutation 拒绝 (G-002)",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-004.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-004.json",
+      "evidence_sha256": "06ab106d850d7ea21b8ff8aa074b787cf8e4d857e7eb3b43b44a1d54b11a16ae"
     },
     {
       "id": "TS1-P-005",
       "group": "PERMISSION_REF",
       "name": "前置未满足时 VAL 拒绝进入 running",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-005.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-005.json",
+      "evidence_sha256": "fb9fe60f6800a4a1683938459478e4a16cf9b802cda65f50d648fd7e1e909ea3"
     },
     {
       "id": "TS1-P-006",
       "group": "PERMISSION_REF",
       "name": "引用未登记来源数据拒绝 (INV-016)",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-006.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-006.json",
+      "evidence_sha256": "db1da65999465533cb178698a7819cf26add8e058e0ad5515accc2e93cdf164b"
     },
     {
       "id": "TS1-P-007",
       "group": "PERMISSION_REF",
       "name": "陈旧 expected_version 提交拒绝",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-007.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-007.json",
+      "evidence_sha256": "b7dc708314520a70b37600133be50f0eebf22db6a535a4f027a81ea8b2a50ff7"
     },
     {
       "id": "TS1-I-001",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "HandoffBundle SHA 不匹配拒收",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-001.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-001.json",
+      "evidence_sha256": "2ea073e493690ca1bcba7665d56c6a95b0f324e494bf00e064734aadbfc67fc4"
     },
     {
       "id": "TS1-I-002",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "receiver 与 intended 身份不符拒收",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-002.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-002.json",
+      "evidence_sha256": "bc85f708469668e2a50d23b632be3dea7a0a60813380f2bbc164c04fdce52d76"
     },
     {
       "id": "TS1-I-003",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "重发 ResultBundle 幂等不二次 commit (INV-011)",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/result-bundles/valid.v2.json"
+      "evidence_pointer": "tests/fixtures/ts001/result-bundles/valid.v2.json",
+      "evidence_sha256": "0aa94f5fffc970cbf7484a4fba5b47180243fe591558e2cee0f9844b579127bd"
     },
     {
       "id": "TS1-I-004",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "retry 创建新 attempt 保留旧记录 (INV-011)",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-004.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-004.json",
+      "evidence_sha256": "5a52067fc5f26194db8f28a3b56c34431412b8fc8dd917b63cb104baa8659c2c"
     },
     {
       "id": "TS1-I-005",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "提交被拒留存记录不静默删除",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-005.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-005-receipt.json",
+      "evidence_sha256": "e80b3846f4504a3e89f16e195d45292bfccc866d27b2a5d13d9c4355770fbbf1"
     },
     {
       "id": "TS1-I-006",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "三层 hash 标注严格区分 (CT-001)",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-006.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-006.json",
+      "evidence_sha256": "11f507544ec01fb6c2c3635c514a3abef014e67698c8d432973045e5c2f7d751"
     },
     {
       "id": "TS1-I-007",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "VAL ResultBundle 缺盲审节拒绝",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-007.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-007.json",
+      "evidence_sha256": "0469e5a4aed9f145813c297c4aeebbbfbd1b771a2872578ef5c947820c68fb90"
     },
     {
       "id": "TS1-I-008",
       "group": "IDEMPOTENCY_HANDOFF",
       "name": "候选 SHA 漂移 fail closed 退回新 attempt",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-008.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/idempotency/TS1-I-008.json",
+      "evidence_sha256": "dc3e2f47cd16afbdffb8e94ef287fceb5ad9a5d54e6d668f231f03217df2672a"
     },
     {
       "id": "TS1-R-001",
       "group": "ROLLBACK_RECOVERY",
       "name": "回滚创建新 revision 建立 supersedes 不原地覆盖",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-001.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-001.json",
+      "evidence_sha256": "8f2e90c5fd1122f6a534b80af969a2bddecabd5237bcf8d75e671fa1232f977a"
     },
     {
       "id": "TS1-R-002",
       "group": "ROLLBACK_RECOVERY",
       "name": "回滚后重算引用 SHA 完整无残桩",
       "expected": "PASS",
-      "evidence_pointer": "tests/fixtures/ts001/manifest.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-002.json",
+      "evidence_sha256": "c874f3f53a2f657488418b287cf4a391e55c6a9594f9797c808334e21c36c206"
     },
     {
       "id": "TS1-R-003",
       "group": "ROLLBACK_RECOVERY",
       "name": "恢复 canonical 文件无 G-014 审批时拒绝",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-003.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-003.json",
+      "evidence_sha256": "89950f5294b946267c5529f232aa165360736912e05150a693ba5df6d2af27a9"
     },
     {
       "id": "TS1-R-004",
       "group": "ROLLBACK_RECOVERY",
       "name": "改变 fixture 无 G-011 Gate 拒绝",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-004.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-004.json",
+      "evidence_sha256": "ea5cadff7cd60af5822778984b412d8c5da65dc0e62d258a715d95c775fb4e2a"
     },
     {
       "id": "TS1-R-005",
       "group": "ROLLBACK_RECOVERY",
       "name": "试图覆盖或删除原始历史记录拒绝",
       "expected": "REJECT",
-      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-005.json"
+      "evidence_pointer": "tests/fixtures/ts001/cases/rollback/TS1-R-005.json",
+      "evidence_sha256": "8b1f094144cdc2aa383e49a5d086d251b7296a9a475d4330ce662c27ae2516c5"
     }
   ],
-  "manifest_digest": "09d7be08fbd39b663bb71e6ea93c534711d84aa389dca214d4589650616e0991"
+  "manifest_digest": "c9690210a400658ccbb87bcf8007677805d5ed5a30eecbbfcf483cf60d806b75"
 }

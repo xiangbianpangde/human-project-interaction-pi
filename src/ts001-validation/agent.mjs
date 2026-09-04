@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { sha256 } from "../contracts.mjs";
 import {
   TS001_CANONICAL_INVARIANT_CASES,
@@ -116,30 +116,31 @@ export class Ts001ValidationAgent {
       throw new Ts001ValidationError("MANIFEST_INVALID", `canonical manifest must contain exactly 31 cases, got: ${expectedManifest.length}`);
     }
 
-    // P2: Verify canonical manifest trust anchor / digest
+    // P1-TS001-8: Verify canonical manifest trust anchor / digest (unconditionally mandatory)
     if (canonicalManifest.contract_id !== TS001_CONTRACT_ID || canonicalManifest.revision !== TS001_CONTRACT_REVISION) {
       throw new Ts001ValidationError("MANIFEST_CONTRACT_MISMATCH", `manifest contract/revision mismatch: ${canonicalManifest.contract_id}@${canonicalManifest.revision}`);
     }
-    if (canonicalManifest.manifest_digest) {
-      const computedManifestDigest = sha256({
-        contract_id: canonicalManifest.contract_id,
-        revision: canonicalManifest.revision,
-        authority_contract_sha256: canonicalManifest.authority_contract_sha256,
-        prd_sha256: canonicalManifest.prd_sha256,
-        technical_design_sha256: canonicalManifest.technical_design_sha256,
-        cases_count: canonicalManifest.cases_count,
-        cases_manifest: canonicalManifest.cases_manifest,
-      });
-      if (canonicalManifest.manifest_digest !== computedManifestDigest) {
-        throw new Ts001ValidationError("MANIFEST_DIGEST_MISMATCH", "canonicalManifest digest verification failed");
-      }
+    if (typeof canonicalManifest.manifest_digest !== "string" || !/^[a-f0-9]{64}$/u.test(canonicalManifest.manifest_digest)) {
+      throw new Ts001ValidationError("MANIFEST_DIGEST_REQUIRED", "canonicalManifest must contain a valid 64-char hex manifest_digest");
+    }
+    const computedManifestDigest = sha256({
+      contract_id: canonicalManifest.contract_id,
+      revision: canonicalManifest.revision,
+      authority_contract_sha256: canonicalManifest.authority_contract_sha256,
+      prd_sha256: canonicalManifest.prd_sha256,
+      technical_design_sha256: canonicalManifest.technical_design_sha256,
+      cases_count: canonicalManifest.cases_count,
+      cases_manifest: canonicalManifest.cases_manifest,
+    });
+    if (canonicalManifest.manifest_digest !== computedManifestDigest) {
+      throw new Ts001ValidationError("MANIFEST_DIGEST_MISMATCH", "canonicalManifest digest verification failed");
     }
 
     if (!candidateRef || !candidateRef.id || !candidateRef.revision || !candidateRef.sha256) {
       throw new Ts001ValidationError("CANDIDATE_REF_REQUIRED", "candidate_ref with id, revision, and sha256 is required");
     }
 
-    const manifestMap = new Map(expectedManifest.map((c) => [c.id, c.expected]));
+    const caseMap = new Map(expectedManifest.map((c) => [c.id, c]));
     const executedMap = new Map();
     const duplicateIds = [];
     const unknownIds = [];
@@ -148,7 +149,7 @@ export class Ts001ValidationAgent {
       if (executedMap.has(c.case_id)) {
         duplicateIds.push(c.case_id);
       }
-      if (!manifestMap.has(c.case_id)) {
+      if (!caseMap.has(c.case_id)) {
         unknownIds.push(c.case_id);
       }
       executedMap.set(c.case_id, c);
@@ -157,16 +158,28 @@ export class Ts001ValidationAgent {
     const missingIds = [];
     const polarityMismatches = [];
 
-    for (const [id, expected] of manifestMap.entries()) {
+    for (const [id, manifestCase] of caseMap.entries()) {
       const executed = executedMap.get(id);
       if (!executed) {
         missingIds.push(id);
         continue;
       }
-      if (expected === "PASS" && executed.status !== "PASSED") {
-        polarityMismatches.push({ id, expected, actual: executed.status });
-      } else if (expected === "REJECT" && executed.status !== "REJECTED") {
-        polarityMismatches.push({ id, expected, actual: executed.status });
+      if (manifestCase.expected === "PASS" && executed.status !== "PASSED") {
+        polarityMismatches.push({ id, expected: manifestCase.expected, actual: executed.status });
+      } else if (manifestCase.expected === "REJECT" && executed.status !== "REJECTED") {
+        polarityMismatches.push({ id, expected: manifestCase.expected, actual: executed.status });
+      }
+
+      // P1-TS001-5: Evidence pointer must match canonical pointer, exist on disk, and match sha256
+      if (!executed.evidence_pointer || executed.evidence_pointer !== manifestCase.evidence_pointer) {
+        polarityMismatches.push({ id, error: "evidence_pointer mismatch or missing" });
+      } else if (!existsSync(executed.evidence_pointer)) {
+        polarityMismatches.push({ id, error: `evidence_pointer does not exist: ${executed.evidence_pointer}` });
+      } else if (manifestCase.evidence_sha256) {
+        const diskSha = sha256(readFileSync(executed.evidence_pointer, "utf8"));
+        if (diskSha !== manifestCase.evidence_sha256) {
+          polarityMismatches.push({ id, error: `evidence_sha256 mismatch for ${executed.evidence_pointer}` });
+        }
       }
     }
 

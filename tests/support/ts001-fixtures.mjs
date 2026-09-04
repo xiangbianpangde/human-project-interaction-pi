@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -338,10 +338,18 @@ export function writeTs001Fixtures(targetRoot) {
     "cases/idempotency/TS1-I-002.json": { stimulus: "receiver_mismatch", intended: "agent-impl", actual: "agent-other" },
     "cases/idempotency/TS1-I-004.json": { stimulus: "failed_attempt_retry", previous_attempt: "ATTEMPT-TS001-001", retry_attempt: "ATTEMPT-TS001-002" },
     "cases/idempotency/TS1-I-005.json": { stimulus: "rejection_ledger_retention", bundle_id: "RB-TS001-001" },
+    "cases/idempotency/TS1-I-005-receipt.json": {
+      receipt_id: "RCP-TS001-REJECT-001",
+      bundle_id: "RB-TS001-001",
+      status: "INPUT_REJECTED",
+      rejection_reason: "PRECONDITION_UNMET",
+      recorded_at: "2026-08-29T10:20:00.000Z",
+    },
     "cases/idempotency/TS1-I-006.json": { stimulus: "three_layer_hash", layers: ["worker_reported", "coordinator_pre_harness", "harness_authoritative"] },
     "cases/idempotency/TS1-I-007.json": { stimulus: "missing_blind_review", bundle_id: "RB-TS001-001" },
     "cases/idempotency/TS1-I-008.json": { stimulus: "candidate_drift", pre_val_sha: "a".repeat(64), read_sha: "b".repeat(64) },
     "cases/rollback/TS1-R-001.json": { stimulus: "rollback_supersedes", old_revision: "1", new_revision: "2" },
+    "cases/rollback/TS1-R-002.json": { stimulus: "mechanical_reference_and_stub_scan", scan_target: "tests/fixtures/ts001" },
     "cases/rollback/TS1-R-003.json": { stimulus: "missing_g014_approval", g014_approved: undefined },
     "cases/rollback/TS1-R-004.json": { stimulus: "missing_g011_gate", g011_approved: undefined },
     "cases/rollback/TS1-R-005.json": { stimulus: "in_place_overwrite", old_revision: "1", new_revision: "1" },
@@ -383,19 +391,32 @@ export function writeTs001Fixtures(targetRoot) {
       { id: "TS1-I-002", group: "IDEMPOTENCY_HANDOFF", name: "receiver 与 intended 身份不符拒收", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-002.json" },
       { id: "TS1-I-003", group: "IDEMPOTENCY_HANDOFF", name: "重发 ResultBundle 幂等不二次 commit (INV-011)", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/result-bundles/valid.v2.json" },
       { id: "TS1-I-004", group: "IDEMPOTENCY_HANDOFF", name: "retry 创建新 attempt 保留旧记录 (INV-011)", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-004.json" },
-      { id: "TS1-I-005", group: "IDEMPOTENCY_HANDOFF", name: "提交被拒留存记录不静默删除", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-005.json" },
+      { id: "TS1-I-005", group: "IDEMPOTENCY_HANDOFF", name: "提交被拒留存记录不静默删除", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-005-receipt.json" },
       { id: "TS1-I-006", group: "IDEMPOTENCY_HANDOFF", name: "三层 hash 标注严格区分 (CT-001)", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-006.json" },
       { id: "TS1-I-007", group: "IDEMPOTENCY_HANDOFF", name: "VAL ResultBundle 缺盲审节拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-007.json" },
       { id: "TS1-I-008", group: "IDEMPOTENCY_HANDOFF", name: "候选 SHA 漂移 fail closed 退回新 attempt", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-008.json" },
       { id: "TS1-R-001", group: "ROLLBACK_RECOVERY", name: "回滚创建新 revision 建立 supersedes 不原地覆盖", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-001.json" },
-      { id: "TS1-R-002", group: "ROLLBACK_RECOVERY", name: "回滚后重算引用 SHA 完整无残桩", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/manifest.json" },
+      { id: "TS1-R-002", group: "ROLLBACK_RECOVERY", name: "回滚后重算引用 SHA 完整无残桩", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-002.json" },
       { id: "TS1-R-003", group: "ROLLBACK_RECOVERY", name: "恢复 canonical 文件无 G-014 审批时拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-003.json" },
       { id: "TS1-R-004", group: "ROLLBACK_RECOVERY", name: "改变 fixture 无 G-011 Gate 拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-004.json" },
       { id: "TS1-R-005", group: "ROLLBACK_RECOVERY", name: "试图覆盖或删除原始历史记录拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-005.json" },
     ],
   };
 
-  manifest.manifest_digest = sha256(manifest);
+  for (const item of manifest.cases_manifest) {
+    const raw = readFileSync(item.evidence_pointer, "utf8");
+    item.evidence_sha256 = sha256(raw);
+  }
+
+  manifest.manifest_digest = sha256({
+    contract_id: manifest.contract_id,
+    revision: manifest.revision,
+    authority_contract_sha256: manifest.authority_contract_sha256,
+    prd_sha256: manifest.prd_sha256,
+    technical_design_sha256: manifest.technical_design_sha256,
+    cases_count: manifest.cases_count,
+    cases_manifest: manifest.cases_manifest,
+  });
   writeFileSync(paths.manifest, JSON.stringify(manifest, null, 2) + "\n");
   return manifest;
 }

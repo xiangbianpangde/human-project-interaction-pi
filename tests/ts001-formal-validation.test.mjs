@@ -141,21 +141,45 @@ describe("TS-001 formal validation milestone", () => {
     });
     assert.strictEqual(scrambledResult.verdict, "NON-CONFORMANT", "Unassigned invariant labels must fail closed");
 
-    // Adversarial witness 4: P1-TS001-5 — missing evidence_pointer fails closed
-    const missingEvidencePointer = manifest.cases_manifest.map((c) => ({
+    // Adversarial witness 5: P1-TS001-5 — nonexistent evidence pointer fails closed
+    const nonexistentPointer = manifest.cases_manifest.map((c) => ({
       case_id: c.id,
       status: c.expected === "PASS" ? "PASSED" : "REJECTED",
-      evidence_pointer: c.id === "TS1-S-003" ? "" : c.evidence_pointer,
+      evidence_pointer: "does/not/exist.json",
       invariants_covered: c.id === "TS1-S-010" ? ["INV-002"] : [],
       started_at: new Date().toISOString(),
       completed_at: new Date().toISOString(),
     }));
-    const missingPointerResult = agent.compileValidationResult({
+    const nonexistentResult = agent.compileValidationResult({
       candidateRef,
       canonicalManifest: manifest,
-      executedCases: missingEvidencePointer,
+      executedCases: nonexistentPointer,
     });
-    assert.strictEqual(missingPointerResult.verdict, "NON-CONFORMANT", "Missing evidence pointer must fail closed");
+    assert.strictEqual(nonexistentResult.verdict, "NON-CONFORMANT", "Nonexistent evidence pointer must fail closed");
+
+    // Adversarial witness 6: P1-TS001-8 — missing or tampered manifest_digest fails closed
+    const tamperedManifest = { ...manifest };
+    delete tamperedManifest.manifest_digest;
+    assert.throws(
+      () => agent.compileValidationResult({
+        candidateRef,
+        canonicalManifest: tamperedManifest,
+        executedCases: validMap,
+      }),
+      /MANIFEST_DIGEST_REQUIRED/u,
+      "Missing manifest_digest must fail closed",
+    );
+
+    const forgedDigestManifest = { ...manifest, manifest_digest: "a".repeat(64) };
+    assert.throws(
+      () => agent.compileValidationResult({
+        candidateRef,
+        canonicalManifest: forgedDigestManifest,
+        executedCases: validMap,
+      }),
+      /MANIFEST_DIGEST_MISMATCH/u,
+      "Forged manifest_digest must fail closed",
+    );
   });
 
   it("converts unexpected implementation exceptions to FAILED (P1-TS001-1)", async () => {

@@ -24,15 +24,22 @@ import {
   TS001_TASK_IMPL,
   TS001_TASK_VAL,
   Ts001ValidationError,
+  assertCandidateNotDrifted,
+  assertIntendedReceiver,
+  assertOptimisticVersion,
   assertRequiredGateConfig,
   assertUniqueEntityIds,
+  attemptSpecMutation,
+  validateDataProvenanceRef,
   validatePathPermission,
   validateTs001BlindReview,
   validateTs001RollbackSupersedes,
   validateTs001TaskSlice,
   validateTs001ThreeLayerHash,
   validateTs001ValidationVerdict,
+  validateValidationRunningPrerequisites,
   verifyArtifactReference,
+  verifyHandoffBundleIntegrity,
 } from "./contract.mjs";
 import { Ts001ValidationAgent } from "./agent.mjs";
 
@@ -581,15 +588,20 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-P-004",
       name: "对只读 ExperimentSpec 发起 mutation request fail closed",
-      command: "attemptMutationOnFrozenSpec(experimentSpec, { title: 'MODIFIED' })",
-      inputContent: { spec: experimentSpec, mutation: { title: "MODIFIED" } },
+      command: "attemptSpecMutation(experimentSpec, { title: 'MUTATE' })",
+      inputContent: { spec: experimentSpec, mutation: { title: "MUTATE" } },
       evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-004.json",
       invariantsCovered: [],
       execute: async () => {
-        if (experimentSpec.status === "frozen") {
-          return { status: "REJECTED", exitCode: 2, output: "ExperimentSpec is frozen: mutation rejected" };
+        try {
+          attemptSpecMutation(experimentSpec, { title: "MUTATE" });
+          throw new Error("Expected mutation on frozen spec to fail");
+        } catch (err) {
+          if (err.code === "TS001_READONLY_MUTATION_DENIED") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected frozen ExperimentSpec mutation to fail");
       },
     }),
   );
@@ -599,16 +611,20 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-P-005",
       name: "IMPL 未 accepted 或候选 SHA 未冻结时让 VAL 进入 running 拒绝",
-      command: "assertValPrerequisites({ implAccepted: false, candidateFrozen: false })",
-      inputContent: { implAccepted: false, candidateFrozen: false },
+      command: "validateValidationRunningPrerequisites({ implTask, candidateRef: null })",
+      inputContent: { implTask, candidateRef: null },
       evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-005.json",
       invariantsCovered: [],
       execute: async () => {
-        const implAccepted = false;
-        if (!implAccepted) {
-          return { status: "REJECTED", exitCode: 2, output: "preconditions not met: IMPL is not accepted" };
+        try {
+          validateValidationRunningPrerequisites({ implTask, candidateRef: null });
+          throw new Error("Expected unmet preconditions to fail");
+        } catch (err) {
+          if (err.code === "TS001_VAL_PRECONDITIONS_UNMET") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected VAL running transition to be rejected when preconditions unmet");
       },
     }),
   );
@@ -618,16 +634,20 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-P-006",
       name: "引用未登记来源或缺失 data_class 的数据 拒绝",
-      command: "validateDataClassPresence(undefined)",
-      inputContent: { data_class: undefined },
+      command: "validateDataProvenanceRef({ id: 'DATA-001', data_class: undefined })",
+      inputContent: { id: "DATA-001", data_class: undefined },
       evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-006.json",
       invariantsCovered: ["INV-016"],
       execute: async () => {
-        const dataClass = undefined;
-        if (!dataClass || !["INTERNAL", "CONFIDENTIAL", "PUBLIC"].includes(dataClass)) {
-          return { status: "REJECTED", exitCode: 2, output: "unregistered or missing data_class rejected" };
+        try {
+          validateDataProvenanceRef({ id: "DATA-001", data_class: undefined });
+          throw new Error("Expected missing data_class to fail");
+        } catch (err) {
+          if (err.code === "TS001_DATA_PROVENANCE_INVALID") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected missing data_class to be rejected");
       },
     }),
   );
@@ -637,17 +657,20 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-P-007",
       name: "使用陈旧 expected_version 提交 拒绝",
-      command: "checkOptimisticLock({ current: 2, expected: 1 })",
-      inputContent: { current: 2, expected: 1 },
+      command: "assertOptimisticVersion({ currentRevision: 2, expectedRevision: 1 })",
+      inputContent: { currentRevision: 2, expectedRevision: 1 },
       evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-007.json",
       invariantsCovered: [],
       execute: async () => {
-        const current = 2;
-        const expected = 1;
-        if (current !== expected) {
-          return { status: "REJECTED", exitCode: 2, output: `version conflict: current ${current} !== expected ${expected}` };
+        try {
+          assertOptimisticVersion({ currentRevision: 2, expectedRevision: 1 });
+          throw new Error("Expected stale expected_version to fail");
+        } catch (err) {
+          if (err.code === "TS001_STALE_EXPECTED_VERSION") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected stale expected_version to be rejected");
       },
     }),
   );
@@ -661,17 +684,20 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-I-001",
       name: "HandoffBundle SHA 不匹配 接收方拒收",
-      command: "verifyHandoffSha({ claimed: 'aaa...', computed: 'bbb...' })",
-      inputContent: { claimed: "a".repeat(64), computed: "b".repeat(64) },
+      command: "verifyHandoffBundleIntegrity(handoffBundle, 'b'.repeat(64))",
+      inputContent: { claimed: handoffBundle.handoff_revision, computed: "b".repeat(64) },
       evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-001.json",
       invariantsCovered: [],
       execute: async () => {
-        const claimed = "a".repeat(64);
-        const computed = "b".repeat(64);
-        if (claimed !== computed) {
-          return { status: "REJECTED", exitCode: 2, output: "HandoffBundle SHA mismatch: receiver rejected" };
+        try {
+          verifyHandoffBundleIntegrity(handoffBundle, "b".repeat(64));
+          throw new Error("Expected handoff SHA mismatch to fail");
+        } catch (err) {
+          if (err.code === "TS001_HANDOFF_SHA_MISMATCH") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected handoff SHA mismatch to be rejected");
       },
     }),
   );
@@ -681,16 +707,20 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-I-002",
       name: "receiver 与 intended identity 不符 接收方拒收",
-      command: "assertReceiverIdentity('agent-other', handoffBundle.receiver.agentId)",
+      command: "assertIntendedReceiver(handoffBundle, 'agent-other')",
       inputContent: { intended: handoffBundle.receiver.agentId, actual: "agent-other" },
       evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-002.json",
       invariantsCovered: [],
       execute: async () => {
-        const actual = "agent-other";
-        if (actual !== handoffBundle.receiver.agentId) {
-          return { status: "REJECTED", exitCode: 2, output: `receiver mismatch: intended ${handoffBundle.receiver.agentId}, got ${actual}` };
+        try {
+          assertIntendedReceiver(handoffBundle, "agent-other");
+          throw new Error("Expected receiver identity mismatch to fail");
+        } catch (err) {
+          if (err.code === "TS001_RECEIVER_MISMATCH") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected receiver identity mismatch to be rejected");
       },
     }),
   );
@@ -765,23 +795,22 @@ export async function runTs001AcceptanceSuite({
       name: "提交被拒 拒绝记录与 ResultBundle 保留不静默删除",
       command: "persistAndReopenRejectionLedgerRecord(rejectedResultBundle)",
       inputContent: { bundle_id: validResultBundle.result_bundle_id },
-      evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-005.json",
+      evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-005-receipt.json",
       invariantsCovered: [],
       execute: async () => {
-        const rejectionDir = ".pi/artifacts/ts001-validation/rejections";
-        mkdirSync(rejectionDir, { recursive: true });
-        const rejectionPath = join(rejectionDir, `${validResultBundle.result_bundle_id}.json`);
+        const rejectionPath = "tests/fixtures/ts001/cases/idempotency/TS1-I-005-receipt.json";
         const record = {
+          receipt_id: "RCP-TS001-REJECT-001",
           bundle_id: validResultBundle.result_bundle_id,
-          bundle_ref: wireRecordRef(validResultBundle, { idKey: "result_bundle_id", revisionKey: "bundle_revision" }),
+          status: "INPUT_REJECTED",
           rejection_reason: "PRECONDITION_UNMET",
-          recorded_at: new Date().toISOString(),
+          recorded_at: "2026-08-29T10:20:00.000Z",
         };
         writeFileSync(rejectionPath, JSON.stringify(record, null, 2) + "\n");
         // Reopen from disk to verify durable preservation
         if (!existsSync(rejectionPath)) throw new Error("Rejection file not written to disk");
         const readBack = JSON.parse(readFileSync(rejectionPath, "utf8"));
-        if (readBack.bundle_id !== validResultBundle.result_bundle_id || !readBack.bundle_ref) {
+        if (readBack.bundle_id !== validResultBundle.result_bundle_id || readBack.status !== "INPUT_REJECTED") {
           throw new Error("Rejection record corrupted on disk");
         }
         return { status: "PASSED", output: `rejection record durably written and verified at ${rejectionPath}` };
@@ -840,17 +869,20 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-I-008",
       name: "VAL 读取候选前候选 SHA 已变化 fail closed 退回新 attempt",
-      command: "assertCandidateNotDrifted({ preValSha: 'aaa...', readSha: 'bbb...' })",
-      inputContent: { preValSha: "a".repeat(64), readSha: "b".repeat(64) },
+      command: "assertCandidateNotDrifted({ preValSha: 'aaa...', postValSha: 'bbb...' })",
+      inputContent: { preValSha: "a".repeat(64), postValSha: "b".repeat(64) },
       evidencePointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-008.json",
       invariantsCovered: [],
       execute: async () => {
-        const preValSha = "a".repeat(64);
-        const readSha = "b".repeat(64);
-        if (preValSha !== readSha) {
-          return { status: "REJECTED", exitCode: 2, output: "candidate SHA drifted before VAL read: fail closed, retreat to new attempt" };
+        try {
+          assertCandidateNotDrifted({ preValSha: "a".repeat(64), postValSha: "b".repeat(64) });
+          throw new Error("Expected candidate drift to fail");
+        } catch (err) {
+          if (err.code === "TS001_CANDIDATE_DRIFT") {
+            return { status: "REJECTED", exitCode: 2, output: err.message };
+          }
+          throw err;
         }
-        throw new Error("Expected candidate drift to fail closed");
       },
     }),
   );
@@ -890,7 +922,7 @@ export async function runTs001AcceptanceSuite({
       name: "回滚后重算引用、SHA 与链接 完整无残桩",
       command: "mechanicallyScanAllReferencesAndStubs()",
       inputContent: { scanTarget: "tests/fixtures/ts001" },
-      evidencePointer: "tests/fixtures/ts001/manifest.json",
+      evidencePointer: "tests/fixtures/ts001/cases/rollback/TS1-R-002.json",
       invariantsCovered: [],
       execute: async () => {
         const missingFiles = [];
