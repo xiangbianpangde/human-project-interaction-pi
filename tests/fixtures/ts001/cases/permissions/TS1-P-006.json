@@ -1,3 +1,10 @@
 {
-  "stimulus": "missing_dataclass"
+  "stimulus": "unregistered_source_or_missing_dataclass",
+  "registered_sources": [
+    "DOC-HPI-PRD",
+    "DOC-HPI-TECH-DESIGN",
+    "TS1-TEST-001",
+    "PROTO-E017"
+  ],
+  "unregistered_source": "UNREGISTERED-SOURCE-001"
 }

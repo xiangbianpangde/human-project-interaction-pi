@@ -4,6 +4,7 @@ export const TS001_CONTRACT_ID = "TS1-TEST-001";
 export const TS001_CONTRACT_REVISION = "1";
 export const TS001_TASK_IMPL = "TS001-IMPL";
 export const TS001_TASK_VAL = "TS001-VAL";
+export const TS001_MANIFEST_DIGEST = "aa39bc4853a9c22922015948148e40bcb8b46b565491d3dfd3b158aaa8065481";
 
 export const TS001_DIRECT_INVARIANTS = Object.freeze([
   "INV-002",
@@ -48,6 +49,31 @@ export const TS001_REQUIRED_GATES = Object.freeze([
   "G-014",
   "G-SCHEMA",
   "G-PERMISSION",
+]);
+
+export const TS001_REQUIRED_SCHEMAS = Object.freeze([
+  "task-slice",
+  "handoff-bundle",
+  "result-bundle",
+  "experiment-spec",
+  "validation-result",
+]);
+
+export const TS001_REQUIRED_INTEGRITY_RULES = Object.freeze([
+  "INV-002",
+  "INV-004",
+  "INV-005",
+  "INV-007",
+  "INV-011",
+  "INV-012",
+  "INV-016",
+]);
+
+export const TS001_REGISTERED_SOURCES = Object.freeze([
+  "DOC-HPI-PRD",
+  "DOC-HPI-TECH-DESIGN",
+  "TS1-TEST-001",
+  "PROTO-E017",
 ]);
 
 export class Ts001ValidationError extends Error {
@@ -169,6 +195,35 @@ export function assertRequiredGateConfig(gateConfig, path = "gateConfig") {
   return true;
 }
 
+export function assertRequiredIntegrityConfig(config, path = "integrityConfig") {
+  if (!config || typeof config !== "object") {
+    fail("TS001_INTEGRITY_CONFIG_MISSING", `missing integrity configuration at ${path}: fail closed immediately (INV-012)`);
+  }
+  // 1. Required Gates branch
+  assertRequiredGateConfig(config.gates, `${path}.gates`);
+
+  // 2. Required Schemas branch
+  if (!config.schemas || typeof config.schemas !== "object") {
+    fail("TS001_INTEGRITY_CONFIG_MISSING", `missing schemas configuration at ${path}.schemas: fail closed immediately (INV-012)`);
+  }
+  for (const s of TS001_REQUIRED_SCHEMAS) {
+    if (!config.schemas[s] || config.schemas[s].enabled !== true) {
+      fail("TS001_INTEGRITY_CONFIG_MISSING", `required schema ${s} missing or disabled: fail closed immediately (INV-012)`);
+    }
+  }
+
+  // 3. Required Integrity Rules branch
+  if (!config.rules || typeof config.rules !== "object") {
+    fail("TS001_INTEGRITY_CONFIG_MISSING", `missing integrity rules configuration at ${path}.rules: fail closed immediately (INV-012)`);
+  }
+  for (const r of TS001_REQUIRED_INTEGRITY_RULES) {
+    if (!config.rules[r] || config.rules[r].enabled !== true) {
+      fail("TS001_INTEGRITY_CONFIG_MISSING", `required integrity rule ${r} missing or disabled: fail closed immediately (INV-012)`);
+    }
+  }
+  return true;
+}
+
 export function verifyArtifactReference(artifactRef, actualBytes, path = "artifact") {
   if (!artifactRef || typeof artifactRef !== "object" || !artifactRef.sha256) {
     fail("TS001_ARTIFACT_REF_INVALID", `${path} missing artifactRef or sha256 (INV-005)`);
@@ -187,10 +242,29 @@ export function verifyArtifactReference(artifactRef, actualBytes, path = "artifa
   return true;
 }
 
-export function validatePathPermission(targetPath, permissionScope, path = "path") {
-  if (typeof targetPath !== "string" || !targetPath.trim()) {
+export function normalizeSafeRelativePath(inputPath, path = "path") {
+  if (typeof inputPath !== "string" || !inputPath.trim()) {
     fail("TS001_PATH_INVALID", `${path} must be a non-empty string`);
   }
+  if (inputPath.includes("\0")) {
+    fail("TS001_PERMISSION_OUTSIDE_ALLOWLIST", `${path} cannot contain null byte`);
+  }
+  if (inputPath.startsWith("/") || /^[a-zA-Z]:[\\/]/u.test(inputPath) || inputPath.startsWith("\\\\")) {
+    fail("TS001_PERMISSION_OUTSIDE_ALLOWLIST", `${path} cannot be absolute, drive, or UNC path: ${inputPath} (INV-007)`);
+  }
+  const rawSegments = inputPath.replace(/\\/g, "/").split("/");
+  if (rawSegments.includes("..") || rawSegments.includes(".")) {
+    fail("TS001_PERMISSION_OUTSIDE_ALLOWLIST", `${path} cannot contain '.' or '..' traversal segments: ${inputPath} (INV-007)`);
+  }
+  const cleanSegments = rawSegments.filter(Boolean);
+  if (cleanSegments.length === 0) {
+    fail("TS001_PERMISSION_OUTSIDE_ALLOWLIST", `${path} cannot resolve to empty or root path (INV-007)`);
+  }
+  return cleanSegments.join("/");
+}
+
+export function validatePathPermission(targetPath, permissionScope, path = "path") {
+  const normalizedTarget = normalizeSafeRelativePath(targetPath, path);
   if (!permissionScope || typeof permissionScope !== "object") {
     fail("TS001_SCOPE_INVALID", "permissionScope is required");
   }
@@ -198,12 +272,13 @@ export function validatePathPermission(targetPath, permissionScope, path = "path
   const forbidden = Array.isArray(permissionScope.forbidden_paths) ? permissionScope.forbidden_paths : [];
 
   const matchesPattern = (p) => {
-    if (p.endsWith("/**")) {
-      const dirPrefix = p.slice(0, -3) + "/";
-      const exactDir = p.slice(0, -3);
-      return targetPath === exactDir || targetPath.startsWith(dirPrefix);
+    const cleanP = p.replace(/\\/g, "/");
+    if (cleanP.endsWith("/**")) {
+      const dirPrefix = cleanP.slice(0, -2); // e.g. "src/"
+      const exactDir = cleanP.slice(0, -3); // e.g. "src"
+      return normalizedTarget === exactDir || normalizedTarget.startsWith(dirPrefix);
     }
-    return targetPath === p;
+    return normalizedTarget === cleanP;
   };
 
   const isForbidden = forbidden.some(matchesPattern);
@@ -212,8 +287,8 @@ export function validatePathPermission(targetPath, permissionScope, path = "path
   if (isForbidden || !isAllowed) {
     fail(
       "TS001_PERMISSION_OUTSIDE_ALLOWLIST",
-      `write to path outside allowlist or in forbidden scope: ${targetPath} (INV-007)`,
-      { targetPath, allowed, forbidden },
+      `write to path outside allowlist or in forbidden scope: ${targetPath} (normalized: ${normalizedTarget}) (INV-007)`,
+      { targetPath, normalizedTarget, allowed, forbidden },
     );
   }
   return true;
@@ -243,7 +318,7 @@ export function validateValidationRunningPrerequisites({ implTask, candidateRef 
   return true;
 }
 
-export function validateDataProvenanceRef(dataRef, path = "dataRef") {
+export function validateDataProvenanceRef(dataRef, { registeredSources = TS001_REGISTERED_SOURCES } = {}, path = "dataRef") {
   if (!dataRef || typeof dataRef !== "object") {
     fail("TS001_DATA_PROVENANCE_INVALID", `${path} must be a valid data reference object (INV-016)`);
   }
@@ -252,6 +327,13 @@ export function validateDataProvenanceRef(dataRef, path = "dataRef") {
     fail(
       "TS001_DATA_PROVENANCE_INVALID",
       `${path} missing or unregistered data_class: ${String(dataClass)} (INV-016)`,
+    );
+  }
+  const sourceId = dataRef.source_id || dataRef.id;
+  if (!sourceId || !registeredSources.includes(sourceId)) {
+    fail(
+      "TS001_DATA_PROVENANCE_INVALID",
+      `${path} references unregistered source: ${String(sourceId)} (INV-016)`,
     );
   }
   return true;

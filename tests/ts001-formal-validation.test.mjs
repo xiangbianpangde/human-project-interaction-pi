@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -15,6 +16,7 @@ import {
 import { Ts001ValidationAgent } from "../src/ts001-validation/agent.mjs";
 import {
   createAjvValidator,
+  resolveCandidateRef,
   runTs001AcceptanceSuite,
 } from "../src/ts001-validation/runner.mjs";
 
@@ -40,7 +42,13 @@ describe("TS-001 formal validation milestone", () => {
 
   it("executes all 31 acceptance cases with exact 10 PASSED and 21 REJECTED polarity", async () => {
     const agent = new Ts001ValidationAgent();
-    const { manifest, executedCases, validationResult } = await runTs001AcceptanceSuite({ agent });
+    const expectedCommit = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    const expectedTree = execSync("git rev-parse HEAD^{tree}", { encoding: "utf8" }).trim();
+    const { manifest, executedCases, validationResult } = await runTs001AcceptanceSuite({
+      agent,
+      expectedCommit,
+      expectedTree,
+    });
 
     assert.strictEqual(executedCases.length, 31);
     assert.strictEqual(manifest.cases_manifest.length, 31);
@@ -257,10 +265,60 @@ describe("TS-001 formal validation milestone", () => {
       /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
     );
 
+    // Traversal bypass attempt 1: src/../canonical/state.yaml
+    assert.throws(
+      () => validatePathPermission("src/../canonical/state.yaml", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+
+    // Traversal bypass attempt 2: src/../../outside.txt
+    assert.throws(
+      () => validatePathPermission("src/../../outside.txt", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+
+    // Absolute and drive path bypass attempts
+    assert.throws(
+      () => validatePathPermission("/etc/passwd", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+    assert.throws(
+      () => validatePathPermission("C:\\Windows\\system32", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+
     // Forbidden path
     assert.throws(
       () => validatePathPermission("canonical/state.yaml", scope),
       /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
     );
+  });
+
+  it("enforces mandatory expected candidate commit and tree binding", () => {
+    // Missing expected commit or tree
+    assert.throws(
+      () => resolveCandidateRef({}),
+      /CANDIDATE_EXPECTED_IDENTITY_REQUIRED/u,
+    );
+
+    const realCommit = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    const realTree = execSync("git rev-parse HEAD^{tree}", { encoding: "utf8" }).trim();
+
+    // Mismatched commit
+    assert.throws(
+      () => resolveCandidateRef({ expectedCommit: "0".repeat(40), expectedTree: realTree }),
+      /CANDIDATE_COMMIT_MISMATCH/u,
+    );
+
+    // Mismatched tree
+    assert.throws(
+      () => resolveCandidateRef({ expectedCommit: realCommit, expectedTree: "0".repeat(40) }),
+      /CANDIDATE_TREE_MISMATCH/u,
+    );
+
+    // Matching commit and tree
+    const ref = resolveCandidateRef({ expectedCommit: realCommit, expectedTree: realTree });
+    assert.strictEqual(ref.revision, realCommit);
+    assert.ok(ref.sha256);
   });
 });

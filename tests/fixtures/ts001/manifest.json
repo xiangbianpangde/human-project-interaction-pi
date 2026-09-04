@@ -92,7 +92,7 @@
       "name": "缺失 integrity rule/Gate 配置 fail closed (INV-012)",
       "expected": "REJECT",
       "evidence_pointer": "tests/fixtures/ts001/cases/schema/TS1-S-011.json",
-      "evidence_sha256": "207654c56d0b82ad1f19cf4ed8921a350b14c01138b1fdeefaa29bdee68c77c8"
+      "evidence_sha256": "07248280458fea0290d832352fa39aa7751e946bd0398d24686162f9dba9a6ec"
     },
     {
       "id": "TS1-P-001",
@@ -140,7 +140,7 @@
       "name": "引用未登记来源数据拒绝 (INV-016)",
       "expected": "REJECT",
       "evidence_pointer": "tests/fixtures/ts001/cases/permissions/TS1-P-006.json",
-      "evidence_sha256": "db1da65999465533cb178698a7819cf26add8e058e0ad5515accc2e93cdf164b"
+      "evidence_sha256": "611c3f1f157faabf6361691a458bcbe4ceb4990ad12f368d05f533dfd9454b1e"
     },
     {
       "id": "TS1-P-007",
@@ -255,5 +255,5 @@
       "evidence_sha256": "8b1f094144cdc2aa383e49a5d086d251b7296a9a475d4330ce662c27ae2516c5"
     }
   ],
-  "manifest_digest": "c9690210a400658ccbb87bcf8007677805d5ed5a30eecbbfcf483cf60d806b75"
+  "manifest_digest": "aa39bc4853a9c22922015948148e40bcb8b46b565491d3dfd3b158aaa8065481"
 }

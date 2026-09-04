@@ -21,6 +21,9 @@ import {
 import {
   TS001_CONTRACT_ID,
   TS001_CONTRACT_REVISION,
+  TS001_REQUIRED_GATES,
+  TS001_REQUIRED_INTEGRITY_RULES,
+  TS001_REQUIRED_SCHEMAS,
   TS001_TASK_IMPL,
   TS001_TASK_VAL,
   Ts001ValidationError,
@@ -28,6 +31,7 @@ import {
   assertIntendedReceiver,
   assertOptimisticVersion,
   assertRequiredGateConfig,
+  assertRequiredIntegrityConfig,
   assertUniqueEntityIds,
   attemptSpecMutation,
   validateDataProvenanceRef,
@@ -66,6 +70,20 @@ export function createAjvValidator() {
 }
 
 export function resolveCandidateRef({ expectedCommit, expectedTree } = {}) {
+  if (
+    !expectedCommit ||
+    typeof expectedCommit !== "string" ||
+    !/^[a-f0-9]{40}$/u.test(expectedCommit) ||
+    !expectedTree ||
+    typeof expectedTree !== "string" ||
+    !/^[a-f0-9]{40}$/u.test(expectedTree)
+  ) {
+    throw new Ts001ValidationError(
+      "CANDIDATE_EXPECTED_IDENTITY_REQUIRED",
+      "formal acceptance requires both expectedCommit and expectedTree (40-char hex); absence must fail closed",
+    );
+  }
+
   let observedCommit;
   let observedTree;
   try {
@@ -78,14 +96,14 @@ export function resolveCandidateRef({ expectedCommit, expectedTree } = {}) {
     );
   }
 
-  if (expectedCommit && observedCommit !== expectedCommit) {
+  if (observedCommit !== expectedCommit) {
     throw new Ts001ValidationError(
       "CANDIDATE_COMMIT_MISMATCH",
       `candidate commit mismatch: expected ${expectedCommit}, got ${observedCommit}`,
       { expectedCommit, observedCommit },
     );
   }
-  if (expectedTree && observedTree !== expectedTree) {
+  if (observedTree !== expectedTree) {
     throw new Ts001ValidationError(
       "CANDIDATE_TREE_MISMATCH",
       `candidate tree mismatch: expected ${expectedTree}, got ${observedTree}`,
@@ -202,8 +220,9 @@ export async function runTs001AcceptanceSuite({
   agent = new Ts001ValidationAgent(),
   expectedCommit,
   expectedTree,
-  candidateRef = resolveCandidateRef({ expectedCommit, expectedTree }),
+  candidateRef,
 } = {}) {
+  const resolvedCandidateRef = candidateRef || resolveCandidateRef({ expectedCommit, expectedTree });
   const ajv = createAjvValidator();
   const manifest = JSON.parse(readFileSync(join(fixturesRoot, "manifest.json"), "utf8"));
   const implTask = JSON.parse(readFileSync(join(fixturesRoot, "task-slices/ts001-impl.v2.json"), "utf8"));
@@ -496,20 +515,36 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-S-011",
       name: "删除 required integrity rule、Schema 或 Gate 配置 fail closed",
-      command: "assertRequiredGateConfig(gateConfigMissingG014)",
-      inputContent: { "G-002": { enabled: true } },
+      command: "assertRequiredIntegrityConfig(configMissingGateSchemaRule)",
+      inputContent: { test: "all_three_branches" },
       evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-011.json",
       invariantsCovered: ["INV-012"],
       execute: async () => {
-        try {
-          assertRequiredGateConfig({ "G-002": { enabled: true } });
-          throw new Error("Expected missing gate config to fail closed");
-        } catch (err) {
-          if (err.code === "TS001_GATE_CONFIG_MISSING") {
-            return { status: "REJECTED", exitCode: 2, output: err.message };
-          }
-          throw err;
+        const fullConfig = {
+          gates: Object.fromEntries(TS001_REQUIRED_GATES.map((g) => [g, { enabled: true }])),
+          schemas: Object.fromEntries(TS001_REQUIRED_SCHEMAS.map((s) => [s, { enabled: true }])),
+          rules: Object.fromEntries(TS001_REQUIRED_INTEGRITY_RULES.map((r) => [r, { enabled: true }])),
+        };
+
+        // Branch 1: Missing Gate
+        const badGate = { ...fullConfig, gates: { ...fullConfig.gates, "G-014": { enabled: false } } };
+        let gateFailed = false;
+        try { assertRequiredIntegrityConfig(badGate); } catch (e) { if (e.code === "TS001_GATE_CONFIG_MISSING") gateFailed = true; }
+
+        // Branch 2: Missing Schema
+        const badSchema = { ...fullConfig, schemas: { ...fullConfig.schemas, "validation-result": { enabled: false } } };
+        let schemaFailed = false;
+        try { assertRequiredIntegrityConfig(badSchema); } catch (e) { if (e.code === "TS001_INTEGRITY_CONFIG_MISSING") schemaFailed = true; }
+
+        // Branch 3: Missing Integrity Rule
+        const badRule = { ...fullConfig, rules: { ...fullConfig.rules, "INV-012": { enabled: false } } };
+        let ruleFailed = false;
+        try { assertRequiredIntegrityConfig(badRule); } catch (e) { if (e.code === "TS001_INTEGRITY_CONFIG_MISSING") ruleFailed = true; }
+
+        if (gateFailed && schemaFailed && ruleFailed) {
+          return { status: "REJECTED", exitCode: 2, output: "all three integrity configuration branches (Gate, Schema, Rule) fail closed" };
         }
+        throw new Error("One or more integrity configuration branches failed to reject");
       },
     }),
   );
@@ -634,20 +669,31 @@ export async function runTs001AcceptanceSuite({
     await agent.runCase({
       caseId: "TS1-P-006",
       name: "引用未登记来源或缺失 data_class 的数据 拒绝",
-      command: "validateDataProvenanceRef({ id: 'DATA-001', data_class: undefined })",
-      inputContent: { id: "DATA-001", data_class: undefined },
+      command: "validateDataProvenanceRef(unregisteredOrMissingDataclass)",
+      inputContent: { test: "unregistered_source_and_missing_dataclass" },
       evidencePointer: "tests/fixtures/ts001/cases/permissions/TS1-P-006.json",
       invariantsCovered: ["INV-016"],
       execute: async () => {
+        // Subcase 1: Unregistered source
+        let unregFailed = false;
         try {
-          validateDataProvenanceRef({ id: "DATA-001", data_class: undefined });
-          throw new Error("Expected missing data_class to fail");
-        } catch (err) {
-          if (err.code === "TS001_DATA_PROVENANCE_INVALID") {
-            return { status: "REJECTED", exitCode: 2, output: err.message };
-          }
-          throw err;
+          validateDataProvenanceRef({ source_id: "UNREGISTERED-SOURCE-001", data_class: "INTERNAL" });
+        } catch (e) {
+          if (e.code === "TS001_DATA_PROVENANCE_INVALID") unregFailed = true;
         }
+
+        // Subcase 2: Missing data_class
+        let missingClassFailed = false;
+        try {
+          validateDataProvenanceRef({ source_id: "DOC-HPI-PRD", data_class: undefined });
+        } catch (e) {
+          if (e.code === "TS001_DATA_PROVENANCE_INVALID") missingClassFailed = true;
+        }
+
+        if (unregFailed && missingClassFailed) {
+          return { status: "REJECTED", exitCode: 2, output: "both unregistered source and missing data_class rejected (INV-016)" };
+        }
+        throw new Error("Failed to reject unregistered source or missing data_class");
       },
     }),
   );
@@ -1071,7 +1117,7 @@ export async function runTs001AcceptanceSuite({
       sha256: sha256(valTask),
       pointer: "tests/fixtures/ts001/task-slices/ts001-val.v2.json",
     },
-    candidateRef,
+    candidateRef: resolvedCandidateRef,
     contractRef,
     canonicalManifest: manifest,
     executedCases: caseResults,

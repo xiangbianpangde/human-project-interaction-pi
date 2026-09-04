@@ -6,6 +6,7 @@ import {
   TS001_CONTRACT_ID,
   TS001_CONTRACT_REVISION,
   TS001_DIRECT_INVARIANTS,
+  TS001_MANIFEST_DIGEST,
   TS001_TASK_VAL,
   Ts001ValidationError,
 } from "./contract.mjs";
@@ -134,6 +135,12 @@ export class Ts001ValidationAgent {
     });
     if (canonicalManifest.manifest_digest !== computedManifestDigest) {
       throw new Ts001ValidationError("MANIFEST_DIGEST_MISMATCH", "canonicalManifest digest verification failed");
+    }
+    if (canonicalManifest.manifest_digest !== TS001_MANIFEST_DIGEST) {
+      throw new Ts001ValidationError(
+        "MANIFEST_TRUST_ANCHOR_MISMATCH",
+        `canonicalManifest digest ${canonicalManifest.manifest_digest} does not match authoritative pinned anchor ${TS001_MANIFEST_DIGEST}`,
+      );
     }
 
     if (!candidateRef || !candidateRef.id || !candidateRef.revision || !candidateRef.sha256) {
