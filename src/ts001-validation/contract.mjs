@@ -99,11 +99,20 @@ export function validateTs001ThreeLayerHash({ workerReportedHash, coordinatorPre
 }
 
 export function validateTs001RollbackSupersedes({ oldRef, newRevision, supersedesRef, g014Approved, g011Approved }) {
-  if (g014Approved === false) {
-    fail("TS001_G014_GATE_REQUIRED", "canonical restore requires explicit G-014 human approval");
+  if (!oldRef || typeof oldRef !== "object" || !oldRef.id || !oldRef.revision) {
+    fail("TS001_OLD_REF_REQUIRED", "oldRef must be a valid reference object with id and revision");
   }
-  if (g011Approved === false) {
-    fail("TS001_G011_GATE_REQUIRED", "fixture alteration requires explicit G-011 test contract gate");
+  if (typeof newRevision !== "string" || !newRevision.trim()) {
+    fail("TS001_NEW_REVISION_REQUIRED", "newRevision is required as a non-empty string");
+  }
+  if (newRevision === oldRef.revision) {
+    fail("TS001_IN_PLACE_OVERWRITE_FORBIDDEN", "new revision must differ from old revision to preserve immutable history");
+  }
+  if (g014Approved !== true) {
+    fail("TS001_G014_GATE_REQUIRED", "canonical restore requires explicit G-014 human approval (g014Approved must be true)");
+  }
+  if (g011Approved !== true) {
+    fail("TS001_G011_GATE_REQUIRED", "fixture alteration requires explicit G-011 test contract gate (g011Approved must be true)");
   }
   if (!supersedesRef || typeof supersedesRef !== "object") {
     fail("TS001_SUPERSEDES_MISSING", "rollback must specify supersedes pointing to previous revision");

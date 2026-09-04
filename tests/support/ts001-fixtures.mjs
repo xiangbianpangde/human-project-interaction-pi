@@ -142,9 +142,9 @@ export function buildTs001Fixtures() {
     description: "只读实验规范 fixture，用于验证 G-002 只读对象防篡改 Gate。",
     protocol_ref: {
       id: "PROTO-E017",
-      revision: "1",
-      sha256: sha256("PROTO-E017 content"),
-      pointer: "fixtures/protocol.md",
+      revision: "2",
+      sha256: "622075004393c8139152afe6867c4541fd9c56b353c63a8a49d63bb4ca88bc93",
+      pointer: "tests/fixtures/ts001/protocols/protocol-e017.md",
     },
     parameters: {
       temperature: 0.7,

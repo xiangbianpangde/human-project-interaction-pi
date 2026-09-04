@@ -4,7 +4,7 @@ This directory contains the frozen JSON Schema 2020-12 external wire contracts f
 
 - `experiment-spec.v1.schema.json`: read-only ExperimentSpec schema (`urn:hpi:wire:experiment-spec:v1`);
 - `validation-result.v1.schema.json`: formal ValidationResult schema (`urn:hpi:wire:validation-result:v1`);
-- `manifest.v1.json`: schema set metadata and immutable digest `9e623718cb1dc444b22375e3471a43941972f30b2fb7c2b2c96111d4e35c79bb`.
+- `manifest.v1.json`: schema set metadata and immutable digest `c617eb009d642e053d1c4ec61d835dc040707f575dd20de503cd5c830493c0e0`.
 
 ## Lineage and Dependencies
 

@@ -9,6 +9,7 @@ import {
   TS001_DIRECT_INVARIANTS,
   TS001_TASK_IMPL,
   TS001_TASK_VAL,
+  validateTs001RollbackSupersedes,
 } from "../src/ts001-validation/contract.mjs";
 import { Ts001ValidationAgent } from "../src/ts001-validation/agent.mjs";
 import {
@@ -36,7 +37,7 @@ describe("TS-001 formal validation milestone", () => {
     );
   });
 
-  it("executes all 31 acceptance cases and validates against strict JSON Schema", async () => {
+  it("executes all 31 acceptance cases with exact 10 PASSED and 21 REJECTED polarity", async () => {
     const agent = new Ts001ValidationAgent();
     const { manifest, executedCases, validationResult } = await runTs001AcceptanceSuite({ agent });
 
@@ -53,6 +54,12 @@ describe("TS-001 formal validation milestone", () => {
     assert.strictEqual(pCases.length, 7, "Group 2 Permission/Ref has 7 cases");
     assert.strictEqual(iCases.length, 8, "Group 3 Idempotency has 8 cases");
     assert.strictEqual(rCases.length, 5, "Group 4 Rollback has 5 cases");
+
+    // Exact polarity match
+    const passedCases = executedCases.filter((c) => c.status === "PASSED");
+    const rejectedCases = executedCases.filter((c) => c.status === "REJECTED");
+    assert.strictEqual(passedCases.length, 10, "Exactly 10 positive cases pass");
+    assert.strictEqual(rejectedCases.length, 21, "Exactly 21 negative cases reject");
 
     // All direct invariants have explicit coverage
     const coveredInvariants = new Set(executedCases.flatMap((c) => c.invariants_covered));
@@ -72,27 +79,116 @@ describe("TS-001 formal validation milestone", () => {
     assert.strictEqual(validationResult.verdict, "CONFORMANT");
     assert.strictEqual(validationResult.validator.role, "VALIDATION");
     assert.strictEqual(validationResult.validator.agent_id, agent.agentId);
+
+    // Verify each case retains start/end timestamps
+    for (const c of validationResult.executed_cases) {
+      assert.ok(c.started_at, `case ${c.case_id} must have started_at`);
+      assert.ok(c.completed_at, `case ${c.case_id} must have completed_at`);
+    }
   });
 
-  it("fails closed to NON-CONFORMANT if any case fails or invariants are missed", () => {
+  it("fails closed to NON-CONFORMANT if any case fails, IDs are forged, or polarity diverges", () => {
     const agent = new Ts001ValidationAgent();
+    const manifest = JSON.parse(readFileSync("tests/fixtures/ts001/manifest.json", "utf8"));
+    const candidateRef = { id: "COMMIT-test", revision: "rev-1", sha256: "tree-1" };
+
+    // Adversarial witness 1: 31 arbitrary REJECTED records cannot yield CONFORMANT
+    const allRejected = Array.from({ length: 31 }, (_, i) => ({
+      case_id: `FORGED-${i}`,
+      status: "REJECTED",
+      invariants_covered: TS001_DIRECT_INVARIANTS,
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    }));
+    const forgedResult = agent.compileValidationResult({
+      candidateRef,
+      canonicalManifest: manifest,
+      executedCases: allRejected,
+    });
+    assert.strictEqual(forgedResult.verdict, "NON-CONFORMANT", "31 arbitrary REJECTED must not yield CONFORMANT");
+
+    // Adversarial witness 2: Polarity mismatch (positive case rejected)
+    const validMap = manifest.cases_manifest.map((c) => ({
+      case_id: c.id,
+      status: c.expected === "PASS" ? "PASSED" : "REJECTED",
+      invariants_covered: TS001_DIRECT_INVARIANTS,
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    }));
+    // Flip one positive case to REJECTED
+    validMap[0].status = "REJECTED";
+    const invertedResult = agent.compileValidationResult({
+      candidateRef,
+      canonicalManifest: manifest,
+      executedCases: validMap,
+    });
+    assert.strictEqual(invertedResult.verdict, "NON-CONFORMANT", "Polarity mismatch must fail closed");
 
     // Incomplete case set
     const incomplete = agent.compileValidationResult({
-      candidateRef: { id: TS001_TASK_IMPL, revision: "1", sha256: "0".repeat(64) },
+      candidateRef,
+      canonicalManifest: manifest,
       executedCases: [{ case_id: "TS1-S-001", status: "PASSED", invariants_covered: [] }],
     });
     assert.strictEqual(incomplete.verdict, "NON-CONFORMANT");
+  });
 
-    // Case with FAILED status
-    const withFailure = agent.compileValidationResult({
-      candidateRef: { id: TS001_TASK_IMPL, revision: "1", sha256: "0".repeat(64) },
-      executedCases: Array.from({ length: 31 }, (_, i) => ({
-        case_id: `CASE-${i}`,
-        status: i === 0 ? "FAILED" : "PASSED",
-        invariants_covered: TS001_DIRECT_INVARIANTS,
-      })),
+  it("converts unexpected implementation exceptions to FAILED (P1-TS001-1)", async () => {
+    const agent = new Ts001ValidationAgent();
+    const result = await agent.runCase({
+      caseId: "TS1-CRASH-TEST",
+      name: "crash test",
+      command: "throw new TypeError('bug')",
+      execute: async () => {
+        throw new TypeError("unexpected null pointer / implementation bug");
+      },
     });
-    assert.strictEqual(withFailure.verdict, "NON-CONFORMANT");
+
+    assert.strictEqual(result.status, "FAILED", "Unexpected TypeError must be FAILED, never REJECTED");
+    assert.strictEqual(result.exit_code, 1);
+    assert.strictEqual(result.error_details.code, "UNEXPECTED_ERROR");
+  });
+
+  it("enforces fail-closed G-011 and G-014 gates and forbids in-place overwrite (P1-TS001-2)", () => {
+    const oldRef = { id: "OBJ-001", revision: "1" };
+    const supersedesRef = { id: "OBJ-001", revision: "1" };
+
+    // Missing g014Approved
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "2", supersedesRef, g011Approved: true }),
+      /TS001_G014_GATE_REQUIRED/u,
+    );
+    // Explicit false g014Approved
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "2", supersedesRef, g014Approved: false, g011Approved: true }),
+      /TS001_G014_GATE_REQUIRED/u,
+    );
+
+    // Missing g011Approved
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "2", supersedesRef, g014Approved: true }),
+      /TS001_G011_GATE_REQUIRED/u,
+    );
+    // Explicit false g011Approved
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "2", supersedesRef, g014Approved: true, g011Approved: false }),
+      /TS001_G011_GATE_REQUIRED/u,
+    );
+
+    // In-place revision overwrite attempt
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "1", supersedesRef, g014Approved: true, g011Approved: true }),
+      /TS001_IN_PLACE_OVERWRITE_FORBIDDEN/u,
+    );
+
+    // Valid rollback
+    const ok = validateTs001RollbackSupersedes({
+      oldRef,
+      newRevision: "2",
+      supersedesRef,
+      g014Approved: true,
+      g011Approved: true,
+    });
+    assert.strictEqual(ok, true);
   });
 });
