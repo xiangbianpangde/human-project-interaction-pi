@@ -1,0 +1,7 @@
+{
+  "stimulus": "outside_allowlist",
+  "path": "canonical/state.yaml",
+  "forbidden_paths": [
+    "canonical/**"
+  ]
+}

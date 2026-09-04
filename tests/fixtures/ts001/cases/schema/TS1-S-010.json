@@ -1,0 +1,11 @@
+{
+  "stimulus": "duplicate_entity_id",
+  "records": [
+    {
+      "entity_id": "DUP-001"
+    },
+    {
+      "entity_id": "DUP-001"
+    }
+  ]
+}

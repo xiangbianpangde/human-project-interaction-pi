@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -9,10 +10,13 @@ import {
   TS001_DIRECT_INVARIANTS,
   TS001_TASK_IMPL,
   TS001_TASK_VAL,
+  validatePathPermission,
+  validateTs001RollbackSupersedes,
 } from "../src/ts001-validation/contract.mjs";
 import { Ts001ValidationAgent } from "../src/ts001-validation/agent.mjs";
 import {
   createAjvValidator,
+  resolveCandidateRef,
   runTs001AcceptanceSuite,
 } from "../src/ts001-validation/runner.mjs";
 
@@ -36,9 +40,15 @@ describe("TS-001 formal validation milestone", () => {
     );
   });
 
-  it("executes all 31 acceptance cases and validates against strict JSON Schema", async () => {
+  it("executes all 31 acceptance cases with exact 10 PASSED and 21 REJECTED polarity", async () => {
     const agent = new Ts001ValidationAgent();
-    const { manifest, executedCases, validationResult } = await runTs001AcceptanceSuite({ agent });
+    const expectedCommit = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    const expectedTree = execSync("git rev-parse HEAD^{tree}", { encoding: "utf8" }).trim();
+    const { manifest, executedCases, validationResult } = await runTs001AcceptanceSuite({
+      agent,
+      expectedCommit,
+      expectedTree,
+    });
 
     assert.strictEqual(executedCases.length, 31);
     assert.strictEqual(manifest.cases_manifest.length, 31);
@@ -53,6 +63,12 @@ describe("TS-001 formal validation milestone", () => {
     assert.strictEqual(pCases.length, 7, "Group 2 Permission/Ref has 7 cases");
     assert.strictEqual(iCases.length, 8, "Group 3 Idempotency has 8 cases");
     assert.strictEqual(rCases.length, 5, "Group 4 Rollback has 5 cases");
+
+    // Exact polarity match
+    const passedCases = executedCases.filter((c) => c.status === "PASSED");
+    const rejectedCases = executedCases.filter((c) => c.status === "REJECTED");
+    assert.strictEqual(passedCases.length, 10, "Exactly 10 positive cases pass");
+    assert.strictEqual(rejectedCases.length, 21, "Exactly 21 negative cases reject");
 
     // All direct invariants have explicit coverage
     const coveredInvariants = new Set(executedCases.flatMap((c) => c.invariants_covered));
@@ -72,27 +88,237 @@ describe("TS-001 formal validation milestone", () => {
     assert.strictEqual(validationResult.verdict, "CONFORMANT");
     assert.strictEqual(validationResult.validator.role, "VALIDATION");
     assert.strictEqual(validationResult.validator.agent_id, agent.agentId);
+
+    // Verify each case retains start/end timestamps
+    for (const c of validationResult.executed_cases) {
+      assert.ok(c.started_at, `case ${c.case_id} must have started_at`);
+      assert.ok(c.completed_at, `case ${c.case_id} must have completed_at`);
+    }
   });
 
-  it("fails closed to NON-CONFORMANT if any case fails or invariants are missed", () => {
+  it("fails closed to NON-CONFORMANT if any case fails, IDs are forged, or polarity diverges", () => {
     const agent = new Ts001ValidationAgent();
+    const manifest = JSON.parse(readFileSync("tests/fixtures/ts001/manifest.json", "utf8"));
+    const candidateRef = { id: "COMMIT-test", revision: "rev-1", sha256: "tree-1" };
 
-    // Incomplete case set
-    const incomplete = agent.compileValidationResult({
-      candidateRef: { id: TS001_TASK_IMPL, revision: "1", sha256: "0".repeat(64) },
-      executedCases: [{ case_id: "TS1-S-001", status: "PASSED", invariants_covered: [] }],
+    // Adversarial witness 1: 31 arbitrary REJECTED records cannot yield CONFORMANT
+    const allRejected = Array.from({ length: 31 }, (_, i) => ({
+      case_id: `FORGED-${i}`,
+      status: "REJECTED",
+      invariants_covered: TS001_DIRECT_INVARIANTS,
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    }));
+    const forgedResult = agent.compileValidationResult({
+      candidateRef,
+      canonicalManifest: manifest,
+      executedCases: allRejected,
     });
-    assert.strictEqual(incomplete.verdict, "NON-CONFORMANT");
+    assert.strictEqual(forgedResult.verdict, "NON-CONFORMANT", "31 arbitrary REJECTED must not yield CONFORMANT");
 
-    // Case with FAILED status
-    const withFailure = agent.compileValidationResult({
-      candidateRef: { id: TS001_TASK_IMPL, revision: "1", sha256: "0".repeat(64) },
-      executedCases: Array.from({ length: 31 }, (_, i) => ({
-        case_id: `CASE-${i}`,
-        status: i === 0 ? "FAILED" : "PASSED",
-        invariants_covered: TS001_DIRECT_INVARIANTS,
-      })),
+    // Adversarial witness 2: Polarity mismatch (positive case rejected)
+    const validMap = manifest.cases_manifest.map((c) => ({
+      case_id: c.id,
+      status: c.expected === "PASS" ? "PASSED" : "REJECTED",
+      invariants_covered: TS001_DIRECT_INVARIANTS,
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    }));
+    // Flip one positive case to REJECTED
+    validMap[0].status = "REJECTED";
+    const invertedResult = agent.compileValidationResult({
+      candidateRef,
+      canonicalManifest: manifest,
+      executedCases: validMap,
     });
-    assert.strictEqual(withFailure.verdict, "NON-CONFORMANT");
+    assert.strictEqual(invertedResult.verdict, "NON-CONFORMANT", "Polarity mismatch must fail closed");
+
+    // Adversarial witness 3: P1-TS001-7 — putting all 7 invariants onto S-001 fails closed
+    const scrambledInvariants = manifest.cases_manifest.map((c) => ({
+      case_id: c.id,
+      status: c.expected === "PASS" ? "PASSED" : "REJECTED",
+      evidence_pointer: c.evidence_pointer,
+      invariants_covered: c.id === "TS1-S-001" ? [...TS001_DIRECT_INVARIANTS] : [],
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    }));
+    const scrambledResult = agent.compileValidationResult({
+      candidateRef,
+      canonicalManifest: manifest,
+      executedCases: scrambledInvariants,
+    });
+    assert.strictEqual(scrambledResult.verdict, "NON-CONFORMANT", "Unassigned invariant labels must fail closed");
+
+    // Adversarial witness 5: P1-TS001-5 — nonexistent evidence pointer fails closed
+    const nonexistentPointer = manifest.cases_manifest.map((c) => ({
+      case_id: c.id,
+      status: c.expected === "PASS" ? "PASSED" : "REJECTED",
+      evidence_pointer: "does/not/exist.json",
+      invariants_covered: c.id === "TS1-S-010" ? ["INV-002"] : [],
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    }));
+    const nonexistentResult = agent.compileValidationResult({
+      candidateRef,
+      canonicalManifest: manifest,
+      executedCases: nonexistentPointer,
+    });
+    assert.strictEqual(nonexistentResult.verdict, "NON-CONFORMANT", "Nonexistent evidence pointer must fail closed");
+
+    // Adversarial witness 6: P1-TS001-8 — missing or tampered manifest_digest fails closed
+    const tamperedManifest = { ...manifest };
+    delete tamperedManifest.manifest_digest;
+    assert.throws(
+      () => agent.compileValidationResult({
+        candidateRef,
+        canonicalManifest: tamperedManifest,
+        executedCases: validMap,
+      }),
+      /MANIFEST_DIGEST_REQUIRED/u,
+      "Missing manifest_digest must fail closed",
+    );
+
+    const forgedDigestManifest = { ...manifest, manifest_digest: "a".repeat(64) };
+    assert.throws(
+      () => agent.compileValidationResult({
+        candidateRef,
+        canonicalManifest: forgedDigestManifest,
+        executedCases: validMap,
+      }),
+      /MANIFEST_DIGEST_MISMATCH/u,
+      "Forged manifest_digest must fail closed",
+    );
+  });
+
+  it("converts unexpected implementation exceptions to FAILED (P1-TS001-1)", async () => {
+    const agent = new Ts001ValidationAgent();
+    const result = await agent.runCase({
+      caseId: "TS1-CRASH-TEST",
+      name: "crash test",
+      command: "throw new TypeError('bug')",
+      evidencePointer: "tests/fixtures/ts001/cases/schema/TS1-S-005.json",
+      execute: async () => {
+        throw new TypeError("unexpected null pointer / implementation bug");
+      },
+    });
+
+    assert.strictEqual(result.status, "FAILED", "Unexpected TypeError must be FAILED, never REJECTED");
+    assert.strictEqual(result.exit_code, 1);
+    assert.strictEqual(result.error_details.code, "UNEXPECTED_ERROR");
+  });
+
+  it("enforces fail-closed G-011 and G-014 gates and forbids in-place overwrite (P1-TS001-2)", () => {
+    const oldRef = { id: "OBJ-001", revision: "1" };
+    const supersedesRef = { id: "OBJ-001", revision: "1" };
+
+    // Missing g014Approved
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "2", supersedesRef, g011Approved: true }),
+      /TS001_G014_GATE_REQUIRED/u,
+    );
+    // Explicit false g014Approved
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "2", supersedesRef, g014Approved: false, g011Approved: true }),
+      /TS001_G014_GATE_REQUIRED/u,
+    );
+
+    // Missing g011Approved
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "2", supersedesRef, g014Approved: true }),
+      /TS001_G011_GATE_REQUIRED/u,
+    );
+    // Explicit false g011Approved
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "2", supersedesRef, g014Approved: true, g011Approved: false }),
+      /TS001_G011_GATE_REQUIRED/u,
+    );
+
+    // In-place revision overwrite attempt
+    assert.throws(
+      () => validateTs001RollbackSupersedes({ oldRef, newRevision: "1", supersedesRef, g014Approved: true, g011Approved: true }),
+      /TS001_IN_PLACE_OVERWRITE_FORBIDDEN/u,
+    );
+
+    // Valid rollback
+    const ok = validateTs001RollbackSupersedes({
+      oldRef,
+      newRevision: "2",
+      supersedesRef,
+      g014Approved: true,
+      g011Approved: true,
+    });
+    assert.strictEqual(ok, true);
+  });
+
+  it("enforces boundary-safe path allowlist matching (P1-TS001-3 / INV-007)", () => {
+    const scope = {
+      allowed_paths: ["src/**", "tests/**"],
+      forbidden_paths: ["canonical/**"],
+    };
+
+    // Legitimate path under src/
+    assert.doesNotThrow(() => validatePathPermission("src/index.mjs", scope));
+
+    // Boundary bypass attempt: src-escape/outside.txt must NOT match src/**
+    assert.throws(
+      () => validatePathPermission("src-escape/outside.txt", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+
+    // Traversal bypass attempt 1: src/../canonical/state.yaml
+    assert.throws(
+      () => validatePathPermission("src/../canonical/state.yaml", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+
+    // Traversal bypass attempt 2: src/../../outside.txt
+    assert.throws(
+      () => validatePathPermission("src/../../outside.txt", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+
+    // Absolute and drive path bypass attempts
+    assert.throws(
+      () => validatePathPermission("/etc/passwd", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+    assert.throws(
+      () => validatePathPermission("C:\\Windows\\system32", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+
+    // Forbidden path
+    assert.throws(
+      () => validatePathPermission("canonical/state.yaml", scope),
+      /TS001_PERMISSION_OUTSIDE_ALLOWLIST/u,
+    );
+  });
+
+  it("enforces mandatory expected candidate commit and tree binding", () => {
+    // Missing expected commit or tree
+    assert.throws(
+      () => resolveCandidateRef({}),
+      /CANDIDATE_EXPECTED_IDENTITY_REQUIRED/u,
+    );
+
+    const realCommit = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    const realTree = execSync("git rev-parse HEAD^{tree}", { encoding: "utf8" }).trim();
+
+    // Mismatched commit
+    assert.throws(
+      () => resolveCandidateRef({ expectedCommit: "0".repeat(40), expectedTree: realTree }),
+      /CANDIDATE_COMMIT_MISMATCH/u,
+    );
+
+    // Mismatched tree
+    assert.throws(
+      () => resolveCandidateRef({ expectedCommit: realCommit, expectedTree: "0".repeat(40) }),
+      /CANDIDATE_TREE_MISMATCH/u,
+    );
+
+    // Matching commit and tree
+    const ref = resolveCandidateRef({ expectedCommit: realCommit, expectedTree: realTree });
+    assert.strictEqual(ref.revision, realCommit);
+    assert.ok(ref.sha256);
   });
 });

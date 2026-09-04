@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { sha256 } from "../contracts.mjs";
 import {
+  TS001_CANONICAL_INVARIANT_CASES,
   TS001_CONTRACT_ID,
   TS001_CONTRACT_REVISION,
   TS001_DIRECT_INVARIANTS,
+  TS001_MANIFEST_DIGEST,
   TS001_TASK_VAL,
   Ts001ValidationError,
 } from "./contract.mjs";
@@ -27,6 +29,7 @@ export class Ts001ValidationAgent {
     inputContent,
     execute,
     invariantsCovered = [],
+    evidencePointer,
   }) {
     const startedAt = new Date().toISOString();
     let inputSha256;
@@ -49,10 +52,21 @@ export class Ts001ValidationAgent {
       outputSha256 = sha256(result?.output ?? "");
       status = result?.status ?? (exitCode === 0 ? "PASSED" : "REJECTED");
     } catch (err) {
-      exitCode = err instanceof Ts001ValidationError ? 2 : 1;
-      outputSha256 = sha256(err.message || String(err));
-      status = "REJECTED";
-      errorDetails = { code: err.code, message: err.message };
+      if (err instanceof Ts001ValidationError) {
+        exitCode = 2;
+        outputSha256 = sha256(err.message || String(err));
+        status = "REJECTED";
+        errorDetails = { code: err.code, message: err.message };
+      } else {
+        exitCode = 1;
+        outputSha256 = sha256(err.stack || String(err));
+        status = "FAILED";
+        errorDetails = { code: "UNEXPECTED_ERROR", message: err.message };
+      }
+    }
+
+    if (!evidencePointer || typeof evidencePointer !== "string" || !evidencePointer.trim()) {
+      throw new Ts001ValidationError("EVIDENCE_POINTER_REQUIRED", `case ${caseId} requires a non-empty evidencePointer (§9.2)`);
     }
 
     const completedAt = new Date().toISOString();
@@ -70,6 +84,7 @@ export class Ts001ValidationAgent {
       output_sha256: outputSha256,
       exit_code: exitCode,
       invariants_covered: invariantsCovered,
+      evidence_pointer: evidencePointer,
       error_details: errorDetails,
       started_at: startedAt,
       completed_at: completedAt,
@@ -91,20 +106,150 @@ export class Ts001ValidationAgent {
       sha256: "e0aeffc678717ba7416b5ff775683ec00919ecc9bdf6054327f6020dedfb9804",
       pointer: "09_TS001_测试与回滚验收.md",
     },
+    canonicalManifest,
     executedCases = [],
   }) {
-    const failedCases = executedCases.filter((c) => c.status === "FAILED");
-    const passedOrExpectedRejected = executedCases.filter(
-      (c) => c.status === "PASSED" || c.status === "REJECTED",
-    );
+    if (!canonicalManifest || !Array.isArray(canonicalManifest.cases_manifest)) {
+      throw new Ts001ValidationError("MANIFEST_REQUIRED", "canonicalManifest with cases_manifest is required");
+    }
+    const expectedManifest = canonicalManifest.cases_manifest;
+    if (expectedManifest.length !== 31) {
+      throw new Ts001ValidationError("MANIFEST_INVALID", `canonical manifest must contain exactly 31 cases, got: ${expectedManifest.length}`);
+    }
 
-    const allInvariantsCovered = new Set(executedCases.flatMap((c) => c.invariants_covered));
+    // P1-TS001-8: Verify canonical manifest trust anchor / digest (unconditionally mandatory)
+    if (canonicalManifest.contract_id !== TS001_CONTRACT_ID || canonicalManifest.revision !== TS001_CONTRACT_REVISION) {
+      throw new Ts001ValidationError("MANIFEST_CONTRACT_MISMATCH", `manifest contract/revision mismatch: ${canonicalManifest.contract_id}@${canonicalManifest.revision}`);
+    }
+    if (typeof canonicalManifest.manifest_digest !== "string" || !/^[a-f0-9]{64}$/u.test(canonicalManifest.manifest_digest)) {
+      throw new Ts001ValidationError("MANIFEST_DIGEST_REQUIRED", "canonicalManifest must contain a valid 64-char hex manifest_digest");
+    }
+    const computedManifestDigest = sha256({
+      contract_id: canonicalManifest.contract_id,
+      revision: canonicalManifest.revision,
+      authority_contract_sha256: canonicalManifest.authority_contract_sha256,
+      prd_sha256: canonicalManifest.prd_sha256,
+      technical_design_sha256: canonicalManifest.technical_design_sha256,
+      cases_count: canonicalManifest.cases_count,
+      cases_manifest: canonicalManifest.cases_manifest,
+    });
+    if (canonicalManifest.manifest_digest !== computedManifestDigest) {
+      throw new Ts001ValidationError("MANIFEST_DIGEST_MISMATCH", "canonicalManifest digest verification failed");
+    }
+    if (canonicalManifest.manifest_digest !== TS001_MANIFEST_DIGEST) {
+      throw new Ts001ValidationError(
+        "MANIFEST_TRUST_ANCHOR_MISMATCH",
+        `canonicalManifest digest ${canonicalManifest.manifest_digest} does not match authoritative pinned anchor ${TS001_MANIFEST_DIGEST}`,
+      );
+    }
+
+    if (!candidateRef || !candidateRef.id || !candidateRef.revision || !candidateRef.sha256) {
+      throw new Ts001ValidationError("CANDIDATE_REF_REQUIRED", "candidate_ref with id, revision, and sha256 is required");
+    }
+
+    const caseMap = new Map(expectedManifest.map((c) => [c.id, c]));
+    const executedMap = new Map();
+    const duplicateIds = [];
+    const unknownIds = [];
+
+    for (const c of executedCases) {
+      if (executedMap.has(c.case_id)) {
+        duplicateIds.push(c.case_id);
+      }
+      if (!caseMap.has(c.case_id)) {
+        unknownIds.push(c.case_id);
+      }
+      executedMap.set(c.case_id, c);
+    }
+
+    const missingIds = [];
+    const polarityMismatches = [];
+
+    for (const [id, manifestCase] of caseMap.entries()) {
+      const executed = executedMap.get(id);
+      if (!executed) {
+        missingIds.push(id);
+        continue;
+      }
+      if (manifestCase.expected === "PASS" && executed.status !== "PASSED") {
+        polarityMismatches.push({ id, expected: manifestCase.expected, actual: executed.status });
+      } else if (manifestCase.expected === "REJECT" && executed.status !== "REJECTED") {
+        polarityMismatches.push({ id, expected: manifestCase.expected, actual: executed.status });
+      }
+
+      // P1-TS001-5: Evidence pointer must match canonical pointer, exist on disk, and match sha256
+      if (!executed.evidence_pointer || executed.evidence_pointer !== manifestCase.evidence_pointer) {
+        polarityMismatches.push({ id, error: "evidence_pointer mismatch or missing" });
+      } else if (!existsSync(executed.evidence_pointer)) {
+        polarityMismatches.push({ id, error: `evidence_pointer does not exist: ${executed.evidence_pointer}` });
+      } else if (manifestCase.evidence_sha256) {
+        const diskSha = sha256(readFileSync(executed.evidence_pointer, "utf8"));
+        if (diskSha !== manifestCase.evidence_sha256) {
+          polarityMismatches.push({ id, error: `evidence_sha256 mismatch for ${executed.evidence_pointer}` });
+        }
+      }
+    }
+
+    // P1-TS001-7: Invariant labels must strictly match canonical assigned cases
+    const canonicalCasesForInv = new Map();
+    for (const [inv, caseIds] of Object.entries(TS001_CANONICAL_INVARIANT_CASES)) {
+      for (const c of caseIds) {
+        if (!canonicalCasesForInv.has(c)) canonicalCasesForInv.set(c, new Set());
+        canonicalCasesForInv.get(c).add(inv);
+      }
+    }
+
+    for (const [inv, expectedCases] of Object.entries(TS001_CANONICAL_INVARIANT_CASES)) {
+      for (const caseId of expectedCases) {
+        const executed = executedMap.get(caseId);
+        if (!executed || !executed.invariants_covered || !executed.invariants_covered.includes(inv)) {
+          polarityMismatches.push({ caseId, missingInvariant: inv });
+        }
+      }
+    }
+
+    for (const c of executedCases) {
+      for (const inv of c.invariants_covered || []) {
+        if (!canonicalCasesForInv.get(c.case_id)?.has(inv)) {
+          polarityMismatches.push({ caseId: c.case_id, unassignedInvariant: inv });
+        }
+      }
+    }
+
+    // P1-TS001-5: 100% of executed cases must carry non-empty evidence_pointer
+    const missingEvidencePointers = executedCases.filter((c) => !c.evidence_pointer || !c.evidence_pointer.trim());
+    if (missingEvidencePointers.length > 0) {
+      polarityMismatches.push({ missingEvidencePointers: missingEvidencePointers.map((c) => c.case_id) });
+    }
+
+    const anyFailed = executedCases.some((c) => c.status === "FAILED");
+    const allInvariantsCovered = new Set(executedCases.flatMap((c) => c.invariants_covered || []));
     const missingDirectInvariants = TS001_DIRECT_INVARIANTS.filter((inv) => !allInvariantsCovered.has(inv));
 
-    let verdict = "CONFORMANT";
-    if (failedCases.length > 0 || missingDirectInvariants.length > 0 || executedCases.length < 31) {
-      verdict = "NON-CONFORMANT";
-    }
+    const isConformant =
+      executedCases.length === 31 &&
+      duplicateIds.length === 0 &&
+      unknownIds.length === 0 &&
+      missingIds.length === 0 &&
+      polarityMismatches.length === 0 &&
+      !anyFailed &&
+      missingDirectInvariants.length === 0;
+
+    const verdict = isConformant ? "CONFORMANT" : "NON-CONFORMANT";
+
+    const wireCases = executedCases.map((c) => ({
+      case_id: c.case_id,
+      status: c.status,
+      command: c.command,
+      environment: c.environment,
+      input_ref: c.input_ref,
+      output_sha256: c.output_sha256,
+      exit_code: c.exit_code,
+      invariants_covered: c.invariants_covered || [],
+      evidence_pointer: c.evidence_pointer,
+      started_at: c.started_at,
+      completed_at: c.completed_at,
+    }));
 
     return {
       schema: "hpi/wire/validation-result/v1",
@@ -113,7 +258,7 @@ export class Ts001ValidationAgent {
       candidate_ref: candidateRef,
       contract_ref: contractRef,
       verdict,
-      executed_cases: executedCases.map(({ error_details, started_at, completed_at, ...wireCase }) => wireCase),
+      executed_cases: wireCases,
       summary: `Executed ${executedCases.length}/31 TS-001 acceptance test cases. Verdict: ${verdict}.`,
       limitations: [
         "TS-001 仅验证四组用例与纯数据 fixture 合同；不包含完整 filesystem gate/Run 运行时。",

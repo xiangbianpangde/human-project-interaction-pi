@@ -1,9 +1,11 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { sha256 } from "../../src/contracts.mjs";
 import {
+  toWireAttempt,
+  toWireEvidence,
   toWireHandoffBundle,
   toWireResultBundle,
   toWireTaskSlice,
@@ -142,9 +144,9 @@ export function buildTs001Fixtures() {
     description: "只读实验规范 fixture，用于验证 G-002 只读对象防篡改 Gate。",
     protocol_ref: {
       id: "PROTO-E017",
-      revision: "1",
-      sha256: sha256("PROTO-E017 content"),
-      pointer: "fixtures/protocol.md",
+      revision: "2",
+      sha256: "622075004393c8139152afe6867c4541fd9c56b353c63a8a49d63bb4ca88bc93",
+      pointer: "tests/fixtures/ts001/protocols/protocol-e017.md",
     },
     parameters: {
       temperature: 0.7,
@@ -189,11 +191,106 @@ export function buildTs001Fixtures() {
     createdAt: "2026-08-29T10:05:00.000Z",
   });
 
+  const handoffRef = wireRecordRef(handoffBundle, {
+    idKey: "handoff_id",
+    revisionKey: "handoff_revision",
+    pointer: "tests/fixtures/ts001/handoff-bundles/valid.v2.json",
+  });
+
+  const attemptRecord = toWireAttempt({
+    attemptId: "ATTEMPT-TS001-001",
+    taskRef: implTaskRef,
+    handoffRef,
+    ordinal: 1,
+    status: "FAILED",
+    workspaceRef: {
+      id: "WORKSPACE-001",
+      revision: "1",
+      sha256: sha256("workspace-001"),
+      pointer: "workspaces/ts001-001",
+    },
+    startedAt: "2026-08-29T10:10:00.000Z",
+    endedAt: "2026-08-29T10:11:00.000Z",
+    failure: { kind: "EVIDENCE", summary: "缺少独立验证凭证", retryable: true },
+    changedFields: [],
+    provenanceRefs: [contractRef],
+    createdAt: "2026-08-29T10:09:00.000Z",
+  });
+
+  const evidenceRecord = toWireEvidence({
+    evidenceId: "EV-TS001-001",
+    taskRef: implTaskRef,
+    attemptId: attemptRecord.attempt_id,
+    kind: "REFERENCE",
+    pointer: "09_TS001_测试与回滚验收.md",
+    sha256: contractRef.sha256,
+    status: "SELF_REPORTED",
+    claimRefs: ["FACT-TS001-001"],
+    collectedBy: {
+      agentId: "agent-impl",
+      role: "IMPLEMENTATION",
+      harnessRevision: "harness/pilot-v1",
+    },
+    verifiedBy: [],
+    limitations: ["worker 自报证据"],
+    sensitivity: "INTERNAL",
+    changedFields: [],
+    provenanceRefs: [contractRef],
+    createdAt: "2026-08-29T10:12:00.000Z",
+  });
+
+  const evidenceRef = wireRecordRef(evidenceRecord, {
+    idKey: "evidence_id",
+    revisionKey: "evidence_revision",
+  });
+
+  const machineResult = {
+    schema: "hpi/machine-result/v1",
+    resultId: "MR-TS001-001",
+    taskId: implTask.task_id,
+    attemptId: attemptRecord.attempt_id,
+    sourceRef: contractRef,
+    verdict: "INCOMPLETE",
+    facts: [
+      {
+        id: "FACT-TS001-001",
+        kind: "TEST",
+        statement: "TS-001 测试用例正在执行",
+        status: "INCOMPLETE",
+        evidenceRefs: [evidenceRef],
+      },
+    ],
+    limitations: ["尚未完成两段式盲审"],
+    unresolved: ["等待独立验证"],
+  };
+
+  const resultBundle = toWireResultBundle({
+    resultBundleId: "RB-TS001-001",
+    taskRef: implTaskRef,
+    handoffRef,
+    attemptRecord,
+    generatedBy: {
+      agentId: "agent-impl",
+      role: "IMPLEMENTATION",
+      harnessRevision: "harness/pilot-v1",
+    },
+    submittedAt: "2026-08-29T10:15:00.000Z",
+    machineResult,
+    evidenceRecords: [evidenceRecord],
+    outputRefs: [],
+    failure: { kind: "EVIDENCE", summary: "尚未完成两段式盲审", retryable: true },
+    unresolved: ["等待独立验证"],
+    nextAttempt: { recommended: true, reason: "完成独立盲审后再次提交" },
+    changedFields: [],
+    provenanceRefs: [contractRef],
+  });
+
   return {
     implTask,
     valTask,
     experimentSpec,
     handoffBundle,
+    resultBundle,
     contractRef,
     prdRef,
     designRef,
@@ -208,6 +305,7 @@ export function writeTs001Fixtures(targetRoot) {
     valTask: join(targetRoot, "task-slices/ts001-val.v2.json"),
     experimentSpec: join(targetRoot, "experiment-specs/e017.v4.json"),
     handoffBundle: join(targetRoot, "handoff-bundles/valid.v2.json"),
+    resultBundle: join(targetRoot, "result-bundles/valid.v2.json"),
     manifest: join(targetRoot, "manifest.json"),
   };
 
@@ -219,6 +317,58 @@ export function writeTs001Fixtures(targetRoot) {
   writeFileSync(paths.valTask, JSON.stringify(fixtures.valTask, null, 2) + "\n");
   writeFileSync(paths.experimentSpec, JSON.stringify(fixtures.experimentSpec, null, 2) + "\n");
   writeFileSync(paths.handoffBundle, JSON.stringify(fixtures.handoffBundle, null, 2) + "\n");
+  writeFileSync(paths.resultBundle, JSON.stringify(fixtures.resultBundle, null, 2) + "\n");
+
+  const caseStimuli = {
+    "cases/schema/TS1-S-005.json": { stimulus: "missing_required_fields", schemas: ["task-slice", "handoff-bundle", "result-bundle", "experiment-spec"] },
+    "cases/schema/TS1-S-006.json": { stimulus: "field_type_mismatch", schemas: ["task-slice", "handoff-bundle", "result-bundle", "experiment-spec"] },
+    "cases/schema/TS1-S-007.json": { stimulus: "invalid_task_id", task_id: "UNKNOWN-TASK" },
+    "cases/schema/TS1-S-008.json": { stimulus: "invalid_dataclass", data_class: "FORBIDDEN_RESTRICTED" },
+    "cases/schema/TS1-S-009.json": { stimulus: "invalid_verdict", verdict: "PASS" },
+    "cases/schema/TS1-S-010.json": { stimulus: "duplicate_entity_id", records: [{ entity_id: "DUP-001" }, { entity_id: "DUP-001" }] },
+    "cases/schema/TS1-S-011.json": {
+      stimulus: "missing_integrity_config",
+      required_gates: ["G-002", "G-011", "G-014", "G-SCHEMA", "G-PERMISSION"],
+      required_schemas: ["task-slice", "handoff-bundle", "result-bundle", "experiment-spec", "validation-result"],
+      required_rules: ["INV-002", "INV-004", "INV-005", "INV-007", "INV-011", "INV-012", "INV-016"],
+    },
+    "cases/permissions/TS1-P-001.json": { stimulus: "unresolvable_spec_ref", pointer: "tests/fixtures/ts001/non-existent.json" },
+    "cases/permissions/TS1-P-002.json": { stimulus: "artifact_hash_mismatch", expected: "a".repeat(64), actual: "b".repeat(64) },
+    "cases/permissions/TS1-P-003.json": { stimulus: "outside_allowlist", path: "canonical/state.yaml", forbidden_paths: ["canonical/**"] },
+    "cases/permissions/TS1-P-004.json": { stimulus: "readonly_spec_mutation", action: "MUTATE", spec_status: "frozen" },
+    "cases/permissions/TS1-P-005.json": { stimulus: "unmet_preconditions", impl_accepted: false, candidate_frozen: false },
+    "cases/permissions/TS1-P-006.json": {
+      stimulus: "unregistered_source_or_missing_dataclass",
+      registered_sources: ["DOC-HPI-PRD", "DOC-HPI-TECH-DESIGN", "TS1-TEST-001", "PROTO-E017"],
+      unregistered_source: "UNREGISTERED-SOURCE-001",
+    },
+    "cases/permissions/TS1-P-007.json": { stimulus: "stale_expected_version", current_version: 2, expected_version: 1 },
+    "cases/idempotency/TS1-I-001.json": { stimulus: "handoff_sha_mismatch", claimed_sha: "a".repeat(64), actual_sha: "b".repeat(64) },
+    "cases/idempotency/TS1-I-002.json": { stimulus: "receiver_mismatch", intended: "agent-impl", actual: "agent-other" },
+    "cases/idempotency/TS1-I-004.json": { stimulus: "failed_attempt_retry", previous_attempt: "ATTEMPT-TS001-001", retry_attempt: "ATTEMPT-TS001-002" },
+    "cases/idempotency/TS1-I-005.json": { stimulus: "rejection_ledger_retention", bundle_id: "RB-TS001-001" },
+    "cases/idempotency/TS1-I-005-receipt.json": {
+      receipt_id: "RCP-TS001-REJECT-001",
+      bundle_id: "RB-TS001-001",
+      status: "INPUT_REJECTED",
+      rejection_reason: "PRECONDITION_UNMET",
+      recorded_at: "2026-08-29T10:20:00.000Z",
+    },
+    "cases/idempotency/TS1-I-006.json": { stimulus: "three_layer_hash", layers: ["worker_reported", "coordinator_pre_harness", "harness_authoritative"] },
+    "cases/idempotency/TS1-I-007.json": { stimulus: "missing_blind_review", bundle_id: "RB-TS001-001" },
+    "cases/idempotency/TS1-I-008.json": { stimulus: "candidate_drift", pre_val_sha: "a".repeat(64), read_sha: "b".repeat(64) },
+    "cases/rollback/TS1-R-001.json": { stimulus: "rollback_supersedes", old_revision: "1", new_revision: "2" },
+    "cases/rollback/TS1-R-002.json": { stimulus: "mechanical_reference_and_stub_scan", scan_target: "tests/fixtures/ts001" },
+    "cases/rollback/TS1-R-003.json": { stimulus: "missing_g014_approval", g014_approved: undefined },
+    "cases/rollback/TS1-R-004.json": { stimulus: "missing_g011_gate", g011_approved: undefined },
+    "cases/rollback/TS1-R-005.json": { stimulus: "in_place_overwrite", old_revision: "1", new_revision: "1" },
+  };
+
+  for (const [relPath, content] of Object.entries(caseStimuli)) {
+    const fullPath = join(targetRoot, relPath);
+    mkdirSync(dirname(fullPath), { recursive: true });
+    writeFileSync(fullPath, JSON.stringify(content, null, 2) + "\n");
+  }
 
   const manifest = {
     contract_id: "TS1-TEST-001",
@@ -228,41 +378,54 @@ export function writeTs001Fixtures(targetRoot) {
     technical_design_sha256: DESIGN_SHA256,
     cases_count: 31,
     cases_manifest: [
-      { id: "TS1-S-001", group: "SCHEMA", name: "合法 TaskSlice fixture", expected: "PASS" },
-      { id: "TS1-S-002", group: "SCHEMA", name: "合法 HandoffBundle fixture", expected: "PASS" },
-      { id: "TS1-S-003", group: "SCHEMA", name: "合法 ResultBundle fixture", expected: "PASS" },
-      { id: "TS1-S-004", group: "SCHEMA", name: "合法 ExperimentSpec 只读 fixture", expected: "PASS" },
-      { id: "TS1-S-005", group: "SCHEMA", name: "删除必填字段拒绝", expected: "REJECT" },
-      { id: "TS1-S-006", group: "SCHEMA", name: "字段类型错误拒绝", expected: "REJECT" },
-      { id: "TS1-S-007", group: "SCHEMA", name: "不合规 task_id 格式拒绝", expected: "REJECT" },
-      { id: "TS1-S-008", group: "SCHEMA", name: "封闭枚举外 data_class 拒绝 (INV-016)", expected: "REJECT" },
-      { id: "TS1-S-009", group: "SCHEMA", name: "VAL verdict 非词表值拒绝", expected: "REJECT" },
-      { id: "TS1-S-010", group: "SCHEMA", name: "重复 entity_id 拒绝 (INV-002)", expected: "REJECT" },
-      { id: "TS1-S-011", group: "SCHEMA", name: "缺失 integrity rule/Gate 配置 fail closed (INV-012)", expected: "REJECT" },
-      { id: "TS1-P-001", group: "PERMISSION_REF", name: "spec_ref 不存在时拒绝 (INV-004)", expected: "REJECT" },
-      { id: "TS1-P-002", group: "PERMISSION_REF", name: "artifact hash 不符时拒绝 (INV-005)", expected: "REJECT" },
-      { id: "TS1-P-003", group: "PERMISSION_REF", name: "写入 allowlist 外路径拒绝 (INV-007)", expected: "REJECT" },
-      { id: "TS1-P-004", group: "PERMISSION_REF", name: "只读 ExperimentSpec 发起 mutation 拒绝 (G-002)", expected: "REJECT" },
-      { id: "TS1-P-005", group: "PERMISSION_REF", name: "前置未满足时 VAL 拒绝进入 running", expected: "REJECT" },
-      { id: "TS1-P-006", group: "PERMISSION_REF", name: "引用未登记来源数据拒绝 (INV-016)", expected: "REJECT" },
-      { id: "TS1-P-007", group: "PERMISSION_REF", name: "陈旧 expected_version 提交拒绝", expected: "REJECT" },
-      { id: "TS1-I-001", group: "IDEMPOTENCY_HANDOFF", name: "HandoffBundle SHA 不匹配拒收", expected: "REJECT" },
-      { id: "TS1-I-002", group: "IDEMPOTENCY_HANDOFF", name: "receiver 与 intended 身份不符拒收", expected: "REJECT" },
-      { id: "TS1-I-003", group: "IDEMPOTENCY_HANDOFF", name: "重发 ResultBundle 幂等不二次 commit (INV-011)", expected: "PASS" },
-      { id: "TS1-I-004", group: "IDEMPOTENCY_HANDOFF", name: "retry 创建新 attempt 保留旧记录 (INV-011)", expected: "PASS" },
-      { id: "TS1-I-005", group: "IDEMPOTENCY_HANDOFF", name: "提交被拒留存记录不静默删除", expected: "PASS" },
-      { id: "TS1-I-006", group: "IDEMPOTENCY_HANDOFF", name: "三层 hash 标注严格区分 (CT-001)", expected: "PASS" },
-      { id: "TS1-I-007", group: "IDEMPOTENCY_HANDOFF", name: "VAL ResultBundle 缺盲审节拒绝", expected: "REJECT" },
-      { id: "TS1-I-008", group: "IDEMPOTENCY_HANDOFF", name: "候选 SHA 漂移 fail closed 退回新 attempt", expected: "REJECT" },
-      { id: "TS1-R-001", group: "ROLLBACK_RECOVERY", name: "回滚创建新 revision 建立 supersedes 不原地覆盖", expected: "PASS" },
-      { id: "TS1-R-002", group: "ROLLBACK_RECOVERY", name: "回滚后重算引用 SHA 完整无残桩", expected: "PASS" },
-      { id: "TS1-R-003", group: "ROLLBACK_RECOVERY", name: "恢复 canonical 文件无 G-014 审批时拒绝", expected: "REJECT" },
-      { id: "TS1-R-004", group: "ROLLBACK_RECOVERY", name: "改变 fixture 无 G-011 Gate 拒绝", expected: "REJECT" },
-      { id: "TS1-R-005", group: "ROLLBACK_RECOVERY", name: "试图覆盖或删除原始历史记录拒绝", expected: "REJECT" },
+      { id: "TS1-S-001", group: "SCHEMA", name: "合法 TaskSlice fixture", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/task-slices/ts001-impl.v2.json" },
+      { id: "TS1-S-002", group: "SCHEMA", name: "合法 HandoffBundle fixture", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/handoff-bundles/valid.v2.json" },
+      { id: "TS1-S-003", group: "SCHEMA", name: "合法 ResultBundle fixture", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/result-bundles/valid.v2.json" },
+      { id: "TS1-S-004", group: "SCHEMA", name: "合法 ExperimentSpec 只读 fixture", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/experiment-specs/e017.v4.json" },
+      { id: "TS1-S-005", group: "SCHEMA", name: "删除必填字段拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/schema/TS1-S-005.json" },
+      { id: "TS1-S-006", group: "SCHEMA", name: "字段类型错误拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/schema/TS1-S-006.json" },
+      { id: "TS1-S-007", group: "SCHEMA", name: "不合规 task_id 格式拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/schema/TS1-S-007.json" },
+      { id: "TS1-S-008", group: "SCHEMA", name: "封闭枚举外 data_class 拒绝 (INV-016)", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/schema/TS1-S-008.json" },
+      { id: "TS1-S-009", group: "SCHEMA", name: "VAL verdict 非词表值拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/schema/TS1-S-009.json" },
+      { id: "TS1-S-010", group: "SCHEMA", name: "重复 entity_id 拒绝 (INV-002)", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/schema/TS1-S-010.json" },
+      { id: "TS1-S-011", group: "SCHEMA", name: "缺失 integrity rule/Gate 配置 fail closed (INV-012)", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/schema/TS1-S-011.json" },
+      { id: "TS1-P-001", group: "PERMISSION_REF", name: "spec_ref 不存在时拒绝 (INV-004)", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/permissions/TS1-P-001.json" },
+      { id: "TS1-P-002", group: "PERMISSION_REF", name: "artifact hash 不符时拒绝 (INV-005)", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/permissions/TS1-P-002.json" },
+      { id: "TS1-P-003", group: "PERMISSION_REF", name: "写入 allowlist 外路径拒绝 (INV-007)", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/permissions/TS1-P-003.json" },
+      { id: "TS1-P-004", group: "PERMISSION_REF", name: "只读 ExperimentSpec 发起 mutation 拒绝 (G-002)", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/permissions/TS1-P-004.json" },
+      { id: "TS1-P-005", group: "PERMISSION_REF", name: "前置未满足时 VAL 拒绝进入 running", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/permissions/TS1-P-005.json" },
+      { id: "TS1-P-006", group: "PERMISSION_REF", name: "引用未登记来源数据拒绝 (INV-016)", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/permissions/TS1-P-006.json" },
+      { id: "TS1-P-007", group: "PERMISSION_REF", name: "陈旧 expected_version 提交拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/permissions/TS1-P-007.json" },
+      { id: "TS1-I-001", group: "IDEMPOTENCY_HANDOFF", name: "HandoffBundle SHA 不匹配拒收", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-001.json" },
+      { id: "TS1-I-002", group: "IDEMPOTENCY_HANDOFF", name: "receiver 与 intended 身份不符拒收", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-002.json" },
+      { id: "TS1-I-003", group: "IDEMPOTENCY_HANDOFF", name: "重发 ResultBundle 幂等不二次 commit (INV-011)", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/result-bundles/valid.v2.json" },
+      { id: "TS1-I-004", group: "IDEMPOTENCY_HANDOFF", name: "retry 创建新 attempt 保留旧记录 (INV-011)", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-004.json" },
+      { id: "TS1-I-005", group: "IDEMPOTENCY_HANDOFF", name: "提交被拒留存记录不静默删除", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-005-receipt.json" },
+      { id: "TS1-I-006", group: "IDEMPOTENCY_HANDOFF", name: "三层 hash 标注严格区分 (CT-001)", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-006.json" },
+      { id: "TS1-I-007", group: "IDEMPOTENCY_HANDOFF", name: "VAL ResultBundle 缺盲审节拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-007.json" },
+      { id: "TS1-I-008", group: "IDEMPOTENCY_HANDOFF", name: "候选 SHA 漂移 fail closed 退回新 attempt", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/idempotency/TS1-I-008.json" },
+      { id: "TS1-R-001", group: "ROLLBACK_RECOVERY", name: "回滚创建新 revision 建立 supersedes 不原地覆盖", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-001.json" },
+      { id: "TS1-R-002", group: "ROLLBACK_RECOVERY", name: "回滚后重算引用 SHA 完整无残桩", expected: "PASS", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-002.json" },
+      { id: "TS1-R-003", group: "ROLLBACK_RECOVERY", name: "恢复 canonical 文件无 G-014 审批时拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-003.json" },
+      { id: "TS1-R-004", group: "ROLLBACK_RECOVERY", name: "改变 fixture 无 G-011 Gate 拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-004.json" },
+      { id: "TS1-R-005", group: "ROLLBACK_RECOVERY", name: "试图覆盖或删除原始历史记录拒绝", expected: "REJECT", evidence_pointer: "tests/fixtures/ts001/cases/rollback/TS1-R-005.json" },
     ],
   };
 
-  manifest.manifest_digest = sha256(manifest);
+  for (const item of manifest.cases_manifest) {
+    const raw = readFileSync(item.evidence_pointer, "utf8");
+    item.evidence_sha256 = sha256(raw);
+  }
+
+  manifest.manifest_digest = sha256({
+    contract_id: manifest.contract_id,
+    revision: manifest.revision,
+    authority_contract_sha256: manifest.authority_contract_sha256,
+    prd_sha256: manifest.prd_sha256,
+    technical_design_sha256: manifest.technical_design_sha256,
+    cases_count: manifest.cases_count,
+    cases_manifest: manifest.cases_manifest,
+  });
   writeFileSync(paths.manifest, JSON.stringify(manifest, null, 2) + "\n");
   return manifest;
 }
