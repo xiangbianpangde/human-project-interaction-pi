@@ -1009,15 +1009,20 @@ export async function runTs001AcceptanceSuite({
           });
         }
 
-        // 4. 扫描 cases_manifest 中所有 31 个用例的 evidence_pointer 存在性
+        // 4. 扫描 cases_manifest 中所有 31 个用例的 evidence_pointer 存在性与 SHA-256
         for (const item of manifest.cases_manifest) {
           if (!item.evidence_pointer || !existsSync(item.evidence_pointer)) {
             missingFiles.push(item.evidence_pointer || `missing_pointer_for_${item.id}`);
+          } else if (item.evidence_sha256) {
+            const actualSha = sha256(readFileSync(item.evidence_pointer, "utf8"));
+            if (actualSha !== item.evidence_sha256) {
+              hashMismatches.push({ pointer: item.evidence_pointer, expected: item.evidence_sha256, actual: actualSha });
+            }
           }
         }
 
         if (missingFiles.length === 0 && hashMismatches.length === 0) {
-          return { status: "PASSED", output: "mechanical scan verified 31 cases + authority + schemas: zero orphaned stubs" };
+          return { status: "PASSED", output: "mechanical scan verified 31 evidence files (existence + SHA) + authority + schemas: zero orphaned stubs" };
         }
         throw new Error(`Residual stubs detected: missing=${JSON.stringify(missingFiles)}, mismatch=${JSON.stringify(hashMismatches)}`);
       },
@@ -1123,9 +1128,19 @@ export async function runTs001AcceptanceSuite({
     executedCases: caseResults,
   });
 
+  // B-01: Persist the ValidationResult as a durable, independently reviewable artifact
+  const artifactDir = process.env.TS001_VALIDATION_ARTIFACT_DIR || ".pi/artifacts/ts001-validation";
+  mkdirSync(artifactDir, { recursive: true });
+  const artifactPath = join(artifactDir, "validation-result.json");
+  const artifactBytes = JSON.stringify(validationResult, null, 2) + "\n";
+  writeFileSync(artifactPath, artifactBytes);
+  const artifactSha256 = createHash("sha256").update(artifactBytes).digest("hex");
+
   return {
     manifest,
     executedCases: caseResults,
     validationResult,
+    artifactPath,
+    artifactSha256,
   };
 }
