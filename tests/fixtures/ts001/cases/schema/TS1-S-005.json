@@ -1,0 +1,9 @@
+{
+  "stimulus": "missing_required_fields",
+  "schemas": [
+    "task-slice",
+    "handoff-bundle",
+    "result-bundle",
+    "experiment-spec"
+  ]
+}

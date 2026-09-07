@@ -53,7 +53,10 @@
           "input_ref",
           "output_sha256",
           "exit_code",
-          "invariants_covered"
+          "invariants_covered",
+          "evidence_pointer",
+          "started_at",
+          "completed_at"
         ],
         "properties": {
           "case_id": {
@@ -86,6 +89,17 @@
             "items": {
               "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
             }
+          },
+          "evidence_pointer": {
+            "$ref": "urn:hpi:wire:common:v1#/$defs/non_empty_string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       }

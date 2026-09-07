@@ -1,0 +1,5 @@
+{
+  "stimulus": "stale_expected_version",
+  "current_version": 2,
+  "expected_version": 1
+}

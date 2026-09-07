@@ -1,0 +1,5 @@
+{
+  "stimulus": "readonly_spec_mutation",
+  "action": "MUTATE",
+  "spec_status": "frozen"
+}

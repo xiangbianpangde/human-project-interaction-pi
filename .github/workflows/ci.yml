@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
@@ -31,7 +33,17 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
       - name: Run deterministic test suite and Skill validator
+        env:
+          TS001_EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          TS001_EXPECTED_TREE: ${{ github.event.pull_request.head.tree_id || '' }}
         run: npm run verify
+      - name: Upload TS-001 validation result artifact
+        if: matrix.node == '22.19.0'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ts001-validation-result-${{ matrix.node }}
+          path: .pi/artifacts/ts001-validation/validation-result.json
+          if-no-files-found: error
 
   windows-contract:
     name: Execution + validation + installer / Windows
@@ -39,6 +51,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Set up Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:

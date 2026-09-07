@@ -1,0 +1,128 @@
+{
+  "schema": "hpi/wire/result-bundle/v2",
+  "result_bundle_id": "RB-TS001-001",
+  "task_ref": {
+    "id": "TS001-IMPL",
+    "revision": "beedcb19fa802a5ebf5230b762ee3a32b734424e4e7ebebf22eb1d2529385b28",
+    "sha256": "beedcb19fa802a5ebf5230b762ee3a32b734424e4e7ebebf22eb1d2529385b28",
+    "pointer": "tests/fixtures/ts001/task-slices/ts001-impl.v2.json"
+  },
+  "handoff_ref": {
+    "id": "HO-TS001-001",
+    "revision": "d9c4fd46062ed147db96e51739f96636ff80cdb823206df4d48327f37e15e328",
+    "sha256": "d9c4fd46062ed147db96e51739f96636ff80cdb823206df4d48327f37e15e328",
+    "pointer": "tests/fixtures/ts001/handoff-bundles/valid.v2.json"
+  },
+  "attempt_ref": {
+    "id": "ATTEMPT-TS001-001",
+    "revision": "6278eb86302f32d60e1729e30a9cd2040573a9015680e52c69bd0b550efd7dd5",
+    "sha256": "6278eb86302f32d60e1729e30a9cd2040573a9015680e52c69bd0b550efd7dd5"
+  },
+  "generated_by": {
+    "agent_id": "agent-impl",
+    "role": "IMPLEMENTATION",
+    "harness_revision": "harness/pilot-v1"
+  },
+  "machine_result": {
+    "schema": "hpi/wire/machine-result/v1",
+    "result_id": "MR-TS001-001",
+    "task_id": "TS001-IMPL",
+    "attempt_id": "ATTEMPT-TS001-001",
+    "result_revision": "14609594d6cd32ad58e3821802c9862fa4733b997942b0ecbf4c446da9bd542b",
+    "source_ref": {
+      "id": "TS1-TEST-001",
+      "revision": "1",
+      "sha256": "e0aeffc678717ba7416b5ff775683ec00919ecc9bdf6054327f6020dedfb9804",
+      "pointer": "09_TS001_测试与回滚验收.md"
+    },
+    "verdict": "INCOMPLETE",
+    "facts": [
+      {
+        "fact_id": "FACT-TS001-001",
+        "kind": "TEST",
+        "statement": "TS-001 测试用例正在执行",
+        "status": "INCOMPLETE",
+        "evidence_refs": [
+          {
+            "id": "EV-TS001-001",
+            "revision": "af064de5ea9c17743118c2fd771d24f168177fa94b6bff0118cf6bb98af9617c",
+            "sha256": "af064de5ea9c17743118c2fd771d24f168177fa94b6bff0118cf6bb98af9617c"
+          }
+        ]
+      }
+    ],
+    "limitations": [
+      "尚未完成两段式盲审"
+    ],
+    "unresolved": [
+      "等待独立验证"
+    ]
+  },
+  "evidence": [
+    {
+      "schema": "hpi/wire/evidence/v2",
+      "evidence_id": "EV-TS001-001",
+      "task_ref": {
+        "id": "TS001-IMPL",
+        "revision": "beedcb19fa802a5ebf5230b762ee3a32b734424e4e7ebebf22eb1d2529385b28",
+        "sha256": "beedcb19fa802a5ebf5230b762ee3a32b734424e4e7ebebf22eb1d2529385b28",
+        "pointer": "tests/fixtures/ts001/task-slices/ts001-impl.v2.json"
+      },
+      "attempt_id": "ATTEMPT-TS001-001",
+      "kind": "REFERENCE",
+      "pointer": "09_TS001_测试与回滚验收.md",
+      "sha256": "e0aeffc678717ba7416b5ff775683ec00919ecc9bdf6054327f6020dedfb9804",
+      "status": "SELF_REPORTED",
+      "claim_refs": [
+        "FACT-TS001-001"
+      ],
+      "collected_by": {
+        "agent_id": "agent-impl",
+        "role": "IMPLEMENTATION",
+        "harness_revision": "harness/pilot-v1"
+      },
+      "verified_by": [],
+      "limitations": [
+        "worker 自报证据"
+      ],
+      "sensitivity": "INTERNAL",
+      "changed_fields": [],
+      "provenance_refs": [
+        {
+          "id": "TS1-TEST-001",
+          "revision": "1",
+          "sha256": "e0aeffc678717ba7416b5ff775683ec00919ecc9bdf6054327f6020dedfb9804",
+          "pointer": "09_TS001_测试与回滚验收.md"
+        }
+      ],
+      "created_at": "2026-08-29T10:12:00.000Z",
+      "evidence_revision": "af064de5ea9c17743118c2fd771d24f168177fa94b6bff0118cf6bb98af9617c"
+    }
+  ],
+  "output_refs": [],
+  "failure": {
+    "kind": "EVIDENCE",
+    "summary": "尚未完成两段式盲审",
+    "retryable": true
+  },
+  "unresolved": [
+    "等待独立验证"
+  ],
+  "next_attempt": {
+    "recommended": true,
+    "reason": "完成独立盲审后再次提交"
+  },
+  "idempotency_key": "cc70e462494600c80f3a7c897934c17b52974f227cacaa4e297e986e02f1e64c",
+  "submitted_at": "2026-08-29T10:15:00.000Z",
+  "submission_authority": "CANDIDATE_ONLY_NOT_PROJECT_CANONICAL",
+  "changed_fields": [],
+  "provenance_refs": [
+    {
+      "id": "TS1-TEST-001",
+      "revision": "1",
+      "sha256": "e0aeffc678717ba7416b5ff775683ec00919ecc9bdf6054327f6020dedfb9804",
+      "pointer": "09_TS001_测试与回滚验收.md"
+    }
+  ],
+  "bundle_revision": "62d765e0e67dee64bcd8dceabc7c34ed289d4c4332228df6ddc38b755bb79703"
+}

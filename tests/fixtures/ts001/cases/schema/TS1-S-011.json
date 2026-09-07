@@ -1,0 +1,26 @@
+{
+  "stimulus": "missing_integrity_config",
+  "required_gates": [
+    "G-002",
+    "G-011",
+    "G-014",
+    "G-SCHEMA",
+    "G-PERMISSION"
+  ],
+  "required_schemas": [
+    "task-slice",
+    "handoff-bundle",
+    "result-bundle",
+    "experiment-spec",
+    "validation-result"
+  ],
+  "required_rules": [
+    "INV-002",
+    "INV-004",
+    "INV-005",
+    "INV-007",
+    "INV-011",
+    "INV-012",
+    "INV-016"
+  ]
+}

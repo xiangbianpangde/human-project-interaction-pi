@@ -14,7 +14,7 @@ export const EXECUTION_WIRE_SCHEMA_SET_DIGEST = "bccb373985dacfdff8eaa1c2f7001cb
 export const VALIDATION_RUNTIME_WIRE_SCHEMA_SET = "hpi/wire/validation-runtime/v1";
 export const VALIDATION_RUNTIME_WIRE_SCHEMA_SET_DIGEST = "598e1ca92f6cedeb97e2e00a4c22703ca5359977c3bd9681a015231fa692d3fa";
 export const ACCEPTANCE_WIRE_SCHEMA_SET = "hpi/wire/acceptance/v1";
-export const ACCEPTANCE_WIRE_SCHEMA_SET_DIGEST = "d8a3456fc55c16c873c31ab7e96e6b67add089fe78c6fa04cc9f5567dc72c7aa";
+export const ACCEPTANCE_WIRE_SCHEMA_SET_DIGEST = "ac709a3d740f371e46126f908eb96f4f8448ad0a28ba8d2c97b2ec7155a66378";
 
 const INTERACTION_MANIFEST_NAME = "manifest.v1.json";
 const EXECUTION_V1_MANIFEST_NAME = "manifest.v1.json";

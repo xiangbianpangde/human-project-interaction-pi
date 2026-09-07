@@ -1,0 +1,7 @@
+{
+  "receipt_id": "RCP-TS001-REJECT-001",
+  "bundle_id": "RB-TS001-001",
+  "status": "INPUT_REJECTED",
+  "rejection_reason": "PRECONDITION_UNMET",
+  "recorded_at": "2026-08-29T10:20:00.000Z"
+}

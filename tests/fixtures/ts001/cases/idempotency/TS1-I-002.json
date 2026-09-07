@@ -1,0 +1,5 @@
+{
+  "stimulus": "receiver_mismatch",
+  "intended": "agent-impl",
+  "actual": "agent-other"
+}
