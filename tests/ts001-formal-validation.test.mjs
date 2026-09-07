@@ -42,8 +42,10 @@ describe("TS-001 formal validation milestone", () => {
 
   it("executes all 31 acceptance cases with exact 10 PASSED and 21 REJECTED polarity", async () => {
     const agent = new Ts001ValidationAgent();
-    const expectedCommit = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
-    const expectedTree = execSync("git rev-parse HEAD^{tree}", { encoding: "utf8" }).trim();
+    // Preferred: trusted CI environment pins the expected candidate identity;
+    // local fallback derives from git rev-parse (same value when tree is clean).
+    const expectedCommit = process.env.TS001_EXPECTED_COMMIT || execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+    const expectedTree = process.env.TS001_EXPECTED_TREE || execSync("git rev-parse HEAD^{tree}", { encoding: "utf8" }).trim();
     const { manifest, executedCases, validationResult } = await runTs001AcceptanceSuite({
       agent,
       expectedCommit,
